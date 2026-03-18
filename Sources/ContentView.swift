@@ -439,7 +439,8 @@ struct TabListView: View {
                     index: index,
                     isSelected: tab.id == workspace.selectedTabId,
                     isOnly: workspace.tabs.count == 1,
-                    onClose: { tabManager.closeTab(tab.id) }
+                    onClose: { tabManager.closeTab(tab.id) },
+                    onDuplicate: { workspace.createTab() }
                 )
                 .onTapGesture { workspace.selectTab(tab.id) }
                 .onDrag {
@@ -477,9 +478,11 @@ struct TabItemView: View {
     let isSelected: Bool
     let isOnly: Bool
     let onClose: () -> Void
+    var onDuplicate: (() -> Void)? = nil
     @State private var isHovering = false
     @State private var isRenaming = false
     @State private var renameText = ""
+    @FocusState private var isRenameFocused: Bool
 
     var body: some View {
         HStack(spacing: 6) {
@@ -495,16 +498,22 @@ struct TabItemView: View {
             }
 
             if isRenaming {
-                TextField("Title", text: $renameText, onCommit: {
-                    let trimmed = renameText.trimmingCharacters(in: .whitespaces)
-                    if !trimmed.isEmpty { tab.title = trimmed }
-                    isRenaming = false
-                })
-                .textFieldStyle(.plain)
-                .font(.system(size: 12, design: .monospaced))
-                .foregroundColor(.white.opacity(0.9))
-                .lineLimit(1)
-                .onExitCommand { isRenaming = false }
+                TextField("Title", text: $renameText)
+                    .focused($isRenameFocused)
+                    .onSubmit {
+                        let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+                        if !trimmed.isEmpty { tab.title = trimmed }
+                        isRenaming = false
+                        isRenameFocused = false
+                    }
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, design: .monospaced))
+                    .foregroundColor(.white.opacity(0.9))
+                    .lineLimit(1)
+                    .onExitCommand {
+                        isRenaming = false
+                        isRenameFocused = false
+                    }
             } else {
                 Text(tab.title.isEmpty ? "Terminal" : tab.title)
                     .font(.system(size: 12))
@@ -533,13 +542,20 @@ struct TabItemView: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .onChange(of: isRenameFocused) { focused in
+            if !focused && isRenaming { isRenaming = false }
+        }
         .contextMenu {
-            Button("Rename Tab") {
-                renameText = tab.title
+            Button("Rename") {
+                renameText = tab.title.isEmpty ? "Terminal" : tab.title
                 isRenaming = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isRenameFocused = true }
+            }
+            if let onDuplicate {
+                Button("Duplicate") { onDuplicate() }
             }
             Divider()
-            Button("Close Tab") { onClose() }
+            Button("Close") { onClose() }
         }
     }
 }
