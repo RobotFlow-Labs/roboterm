@@ -1,6 +1,7 @@
 import AppKit
 import IOKit
 import IOKit.usb
+import Network
 import SwiftUI
 
 // MARK: - Design tokens
@@ -356,6 +357,10 @@ struct HardwarePanel: View {
         task.arguments = ["-c", command]
         do {
             try task.run()
+            // Kill after 5 seconds
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                if task.isRunning { task.terminate() }
+            }
             task.waitUntilExit()
             let data = pipe.fileHandleForReading.readDataToEndOfFile()
             let output = String(data: data, encoding: .utf8)
@@ -366,22 +371,33 @@ struct HardwarePanel: View {
     }
 
     private static func canReachHost(_ host: String) -> Bool {
-        let task = Process()
-        task.launchPath = "/sbin/ping"
-        task.arguments = ["-c", "1", "-W", "1000", host]
-        task.standardOutput = FileHandle.nullDevice
-        task.standardError = FileHandle.nullDevice
-        do {
-            try task.run()
-            let deadline = DispatchTime.now() + .seconds(2)
-            DispatchQueue.global().asyncAfter(deadline: deadline) {
-                if task.isRunning { task.terminate() }
+        // Use Network.framework — fast TCP probe, no subprocess
+        let semaphore = DispatchSemaphore(value: 0)
+        var reachable = false
+
+        let nwHost = NWEndpoint.Host(host)
+        let connection = NWConnection(host: nwHost, port: 22, using: .tcp) // SSH port
+        connection.stateUpdateHandler = { state in
+            switch state {
+            case .ready:
+                reachable = true
+                semaphore.signal()
+            case .failed, .cancelled:
+                semaphore.signal()
+            case .waiting:
+                // Host not reachable
+                semaphore.signal()
+            default:
+                break
             }
-            task.waitUntilExit()
-            return task.terminationStatus == 0
-        } catch {
-            return false
         }
+        connection.start(queue: DispatchQueue.global(qos: .utility))
+
+        // 1.5 second timeout
+        _ = semaphore.wait(timeout: .now() + 1.5)
+        connection.cancel()
+
+        return reachable
     }
 }
 
