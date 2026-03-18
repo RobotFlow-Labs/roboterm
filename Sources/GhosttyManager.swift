@@ -59,6 +59,16 @@ final class GhosttyManager {
 
         ghostty_config_load_default_files(cfg)
         ghostty_config_load_recursive_files(cfg)
+
+        // Also explicitly load our bundled config as fallback
+        let home = FileManager.default.homeDirectoryForCurrentUser.path
+        let userConfig = home + "/.config/ghostty/config"
+        if FileManager.default.fileExists(atPath: userConfig) {
+            userConfig.withCString { ptr in
+                ghostty_config_load_file(cfg, ptr)
+            }
+        }
+
         ghostty_config_finalize(cfg)
 
         var rt = ghostty_runtime_config_s()
