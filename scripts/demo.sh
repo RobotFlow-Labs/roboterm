@@ -36,7 +36,7 @@ echo -e "${O}━━━ WHAT MAKES ROBOTERM DIFFERENT ━━━${R}"
 echo ""
 echo -e "  ${G}●${R} ${B}Agent Launcher Bar${R} — One-click Claude Code & Codex"
 echo -e "  ${G}●${R} ${B}60+ ROS2 Commands${R} — Menus, right-click, agent bar"
-echo -e "  ${G}●${R} ${B}30 CLI Commands${R}   — rt init, rt nodes, rt topics, rt build..."
+echo -e "  ${G}●${R} ${B}31 CLI Commands${R}   — rt init, rt nodes, rt topics, rt build..."
 echo -e "  ${G}●${R} ${B}Native SSH${R}        — Direct PTY, sidebar panel, one-click connect"
 echo -e "  ${G}●${R} ${B}Hardware Detection${R} — IOKit USB hotplug (ZED, RealSense, LiDAR)"
 echo -e "  ${G}●${R} ${B}AppleScript${R}       — Full Cocoa scripting support"
@@ -52,7 +52,9 @@ sleep 1
 
 # Source tools if not already loaded
 if ! type rt &>/dev/null; then
-    source "$(dirname "$0")/roboterm-tools.sh" 2>/dev/null
+    _demo_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    source "$_demo_dir/roboterm-tools.sh" 2>/dev/null
+    unset _demo_dir
 fi
 
 if ! type rt &>/dev/null; then
