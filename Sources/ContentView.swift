@@ -254,6 +254,14 @@ struct WorkspaceItemView: View {
             editText = workspace.customName ?? workspace.displayName
             isEditing = true
         }
+        .contextMenu {
+            Button("Rename Workspace") {
+                editText = workspace.customName ?? workspace.displayName
+                isEditing = true
+            }
+            Divider()
+            Button("Close Workspace") { onClose() }
+        }
     }
 }
 
@@ -381,6 +389,8 @@ struct TabItemView: View {
     let isOnly: Bool
     let onClose: () -> Void
     @State private var isHovering = false
+    @State private var isRenaming = false
+    @State private var renameText = ""
 
     var body: some View {
         HStack(spacing: 6) {
@@ -395,11 +405,24 @@ struct TabItemView: View {
                 .buttonStyle(.plain)
             }
 
-            Text(tab.title.isEmpty ? "Terminal" : tab.title)
-                .font(.system(size: 12))
+            if isRenaming {
+                TextField("Title", text: $renameText, onCommit: {
+                    let trimmed = renameText.trimmingCharacters(in: .whitespaces)
+                    if !trimmed.isEmpty { tab.title = trimmed }
+                    isRenaming = false
+                })
+                .textFieldStyle(.plain)
+                .font(.system(size: 12, design: .monospaced))
+                .foregroundColor(.white.opacity(0.9))
                 .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundColor(isSelected ? .white.opacity(0.9) : .white.opacity(0.4))
+                .onExitCommand { isRenaming = false }
+            } else {
+                Text(tab.title.isEmpty ? "Terminal" : tab.title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                    .foregroundColor(isSelected ? .white.opacity(0.9) : .white.opacity(0.4))
+            }
 
             if index < 9 {
                 Text("\u{2318}\(index + 1)")
@@ -421,6 +444,14 @@ struct TabItemView: View {
         }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
+        .contextMenu {
+            Button("Rename Tab") {
+                renameText = tab.title
+                isRenaming = true
+            }
+            Divider()
+            Button("Close Tab") { onClose() }
+        }
     }
 }
 

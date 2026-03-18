@@ -103,7 +103,10 @@ final class TabManager: ObservableObject {
         }
 
         if workspaces.isEmpty {
-            window?.close()
+            // Don't close — create a fresh workspace instead
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            let ws = addWorkspace(directory: homeDir)
+            ws.createTab()
         }
     }
 
@@ -181,7 +184,10 @@ final class TabManager: ObservableObject {
         }
 
         if workspaces.isEmpty {
-            window?.close()
+            // Don't close — create a fresh workspace instead
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            let ws = addWorkspace(directory: homeDir)
+            ws.createTab()
         }
     }
 
