@@ -855,6 +855,101 @@ rt-alias() {
 }
 
 # ============================================================
+# rt disk — Disk usage for robotics data
+# ============================================================
+rt-disk() {
+    _rt_header "Disk Usage"
+    echo ""
+
+    local cmd="${1:-.}"
+    case "$cmd" in
+        bags)
+            _rt_info "Bag files:"
+            find . -name "*.db3" -o -name "*.mcap" 2>/dev/null | while read f; do
+                local size=$(du -sh "$f" 2>/dev/null | awk '{print $1}')
+                echo -e "    ${_RT_YELLOW}$size${_RT_RESET}  $f"
+            done | sort -rh
+            echo ""
+            local total=$(find . -name "*.db3" -o -name "*.mcap" -exec du -c {} + 2>/dev/null | tail -1 | awk '{print $1}')
+            _rt_info "Total bags: $(echo "$total" | numfmt --to=iec 2>/dev/null || echo "${total}K")"
+            ;;
+        large)
+            _rt_info "Largest files (top 20):"
+            find "${2:-.}" -type f -size +100M 2>/dev/null | head -20 | while read f; do
+                local size=$(du -sh "$f" 2>/dev/null | awk '{print $1}')
+                echo -e "    ${_RT_YELLOW}$size${_RT_RESET}  $f"
+            done | sort -rh
+            ;;
+        clean)
+            _rt_info "Cleaning build artifacts..."
+            if [ -d build ]; then
+                local sz=$(du -sh build 2>/dev/null | awk '{print $1}')
+                rm -rf build
+                _rt_ok "Removed build/ ($sz)"
+            fi
+            if [ -d install ]; then
+                local sz=$(du -sh install 2>/dev/null | awk '{print $1}')
+                rm -rf install log
+                _rt_ok "Removed install/ + log/ ($sz)"
+            fi
+            ;;
+        *)
+            _rt_info "Current directory: $(du -sh "${cmd}" 2>/dev/null | awk '{print $1}')"
+            echo ""
+            du -sh "${cmd}"/*/ 2>/dev/null | sort -rh | head -15 | while read line; do
+                echo -e "    ${_RT_DIM}$line${_RT_RESET}"
+            done
+            echo ""
+            echo "Usage: rt disk [bags|large [dir]|clean|<path>]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt log — View and search ROS2 logs
+# ============================================================
+rt-log() {
+    _rt_header "ROS2 Logs"
+    echo ""
+
+    local log_dir="${ROS_LOG_DIR:-$HOME/.ros/log}"
+
+    local cmd="${1:-latest}"
+    case "$cmd" in
+        latest)
+            local latest=$(ls -t "$log_dir"/*.log 2>/dev/null | head -1)
+            if [ -n "$latest" ]; then
+                _rt_info "Showing: $latest"
+                tail -50 "$latest"
+            else
+                _rt_warn "No logs found in $log_dir"
+            fi
+            ;;
+        follow|tail)
+            local latest=$(ls -t "$log_dir"/*.log 2>/dev/null | head -1)
+            if [ -n "$latest" ]; then
+                _rt_info "Following: $latest"
+                tail -f "$latest"
+            fi
+            ;;
+        search)
+            shift
+            if [ -z "$1" ]; then echo "Usage: rt log search <pattern>"; return 1; fi
+            _rt_info "Searching logs for: $1"
+            grep -rn --color=always "$1" "$log_dir" 2>/dev/null | head -50
+            ;;
+        clean)
+            local sz=$(du -sh "$log_dir" 2>/dev/null | awk '{print $1}')
+            rm -rf "$log_dir"/*
+            _rt_ok "Cleaned ROS2 logs ($sz)"
+            ;;
+        *)
+            echo "Usage: rt log [latest|follow|search <pattern>|clean]"
+            ;;
+    esac
+}
+
+# ============================================================
 # rt — Main entry point / help
 # ============================================================
 rt() {
@@ -885,6 +980,8 @@ rt() {
         profile)    shift; rt-profile "$@" ;;
         export)     shift; rt-export "$@" ;;
         alias)      shift; rt-alias "$@" ;;
+        disk)       shift; rt-disk "$@" ;;
+        log)        shift; rt-log "$@" ;;
         help|*)
             echo -e "${_RT_ORANGE}${_RT_BOLD}"
             echo "  ____   ___  ____   ___ _____ _____ ____  __  __ "
@@ -918,12 +1015,14 @@ rt() {
             echo -e "  ${_RT_ORANGE}rt profile${_RT_RESET}    Environment profiles [list|create|load|save]"
             echo -e "  ${_RT_ORANGE}rt export${_RT_RESET}     Export to Foxglove [bag2csv|bag2mcap|foxglove]"
             echo -e "  ${_RT_ORANGE}rt alias${_RT_RESET}      Custom command shortcuts [list|add]"
+            echo -e "  ${_RT_ORANGE}rt disk${_RT_RESET}       Disk usage [bags|large|clean]"
+            echo -e "  ${_RT_ORANGE}rt log${_RT_RESET}        ROS2 logs [latest|follow|search|clean]"
             echo ""
             ;;
     esac
 }
 
 # Auto-complete
-complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info profile export alias help" rt
+complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info profile export alias disk log help" rt
 
 echo -e "${_RT_DIM}ROBOTERM tools loaded. Type ${_RT_ORANGE}rt${_RT_RESET}${_RT_DIM} for help.${_RT_RESET}"
