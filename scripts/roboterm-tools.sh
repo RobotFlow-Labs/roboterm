@@ -1140,6 +1140,7 @@ rt() {
         dupes)      shift; rt-dupes "$@" ;;
         connect)    shift; rt-connect "$@" ;;
         disconnect) shift; rt-disconnect "$@" ;;
+        --version|-v|version) echo "ROBOTERM v$ROBOTERM_VERSION" ;;
         help|*)
             echo -e "${_RT_ORANGE}${_RT_BOLD}"
             echo "  ____   ___  ____   ___ _____ _____ ____  __  __ "
