@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UserNotifications
 
 /// Callback context attached to each Ghostty surface. Passed through C callbacks
 /// as an opaque `void*` so we can route events back to the correct Swift objects.
@@ -274,6 +275,58 @@ final class GhosttyManager {
             return true
 
         case GHOSTTY_ACTION_TOGGLE_SPLIT_ZOOM:
+            return true
+
+        case GHOSTTY_ACTION_TOGGLE_FULLSCREEN:
+            if let surface = targetSurface(target),
+               let (tabMgr, _) = tabAndManagerForSurface(surface),
+               let window = tabMgr.window {
+                window.toggleFullScreen(nil)
+            }
+            return true
+
+        case GHOSTTY_ACTION_OPEN_URL:
+            let urlPtr = action.action.open_url.url
+            if let urlPtr, let urlString = String(validatingUTF8: urlPtr),
+               let url = URL(string: urlString) {
+                NSWorkspace.shared.open(url)
+            }
+            return true
+
+        case GHOSTTY_ACTION_DESKTOP_NOTIFICATION:
+            let titlePtr = action.action.desktop_notification.title
+            let bodyPtr = action.action.desktop_notification.body
+            let title = titlePtr.flatMap { String(cString: $0) } ?? "ghast"
+            let body = bodyPtr.flatMap { String(cString: $0) } ?? ""
+
+            let content = UNMutableNotificationContent()
+            content.title = title
+            content.body = body
+            let request = UNNotificationRequest(
+                identifier: UUID().uuidString,
+                content: content,
+                trigger: nil
+            )
+            UNUserNotificationCenter.current().add(request) { error in
+                if let error { print("Notification error: \(error)") }
+            }
+            return true
+
+        case GHOSTTY_ACTION_RING_BELL:
+            NSSound.beep()
+            return true
+
+        case GHOSTTY_ACTION_RELOAD_CONFIG:
+            if let oldConfig = config {
+                ghostty_config_free(oldConfig)
+            }
+            if let cfg = ghostty_config_new() {
+                ghostty_config_load_default_files(cfg)
+                ghostty_config_load_recursive_files(cfg)
+                ghostty_config_finalize(cfg)
+                self.config = cfg
+                loadBackgroundColor()
+            }
             return true
 
         case GHOSTTY_ACTION_RENDER:

@@ -36,7 +36,7 @@ struct GhastApp: App {
         }
 
         if getenv("TERM_PROGRAM") == nil {
-            setenv("TERM_PROGRAM", "ghostty", 1)
+            setenv("TERM_PROGRAM", "roboterm", 1)
         }
     }
 }

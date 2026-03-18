@@ -1,6 +1,6 @@
 name: ghast
 options:
-  bundleIdPrefix: com.ghast
+  bundleIdPrefix: com.robotflowlabs
   deploymentTarget:
     macOS: "13.0"
   xcodeVersion: "15.0"
@@ -28,8 +28,8 @@ targets:
           - Info.plist
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.ghast.app
-        PRODUCT_NAME: ghast
+        PRODUCT_BUNDLE_IDENTIFIER: com.robotflowlabs.roboterm
+        PRODUCT_NAME: ROBOTERM
         GENERATE_INFOPLIST_FILE: false
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual

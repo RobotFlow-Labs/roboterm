@@ -8,6 +8,7 @@ final class Workspace: Identifiable, ObservableObject {
     @Published var directory: String
     @Published var tabs: [Tab] = []
     @Published var selectedTabId: UUID?
+    @Published var customName: String?
 
     /// The split layout tree. Each leaf references a tab ID.
     /// When nil or a single leaf, the selected tab fills the whole area.
@@ -18,8 +19,9 @@ final class Workspace: Identifiable, ObservableObject {
         return tabs.first { $0.id == id }
     }
 
-    /// Display name: last path component of the directory.
+    /// Display name: custom name if set, otherwise last path component of the directory.
     var displayName: String {
+        if let customName, !customName.isEmpty { return customName }
         let name = (directory as NSString).lastPathComponent
         return name.isEmpty ? "~" : name
     }

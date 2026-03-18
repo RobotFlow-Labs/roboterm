@@ -187,8 +187,22 @@ class TerminalView: NSView, NSTextInputClient {
 
     override func flagsChanged(with event: NSEvent) {
         guard let surface else { super.flagsChanged(with: event); return }
+
+        // Determine if the modifier was pressed or released by checking
+        // if its flag is currently set
+        let keyCode = event.keyCode
+        let flags = event.modifierFlags
+        let isPressed: Bool
+        switch Int(keyCode) {
+        case 56, 60: isPressed = flags.contains(.shift)      // Left/Right Shift
+        case 59, 62: isPressed = flags.contains(.control)    // Left/Right Control
+        case 58, 61: isPressed = flags.contains(.option)     // Left/Right Option
+        case 54, 55: isPressed = flags.contains(.command)    // Left/Right Command
+        default: isPressed = true
+        }
+
         var keyEvent = ghostty_input_key_s()
-        keyEvent.action = GHOSTTY_ACTION_PRESS
+        keyEvent.action = isPressed ? GHOSTTY_ACTION_PRESS : GHOSTTY_ACTION_RELEASE
         keyEvent.keycode = UInt32(event.keyCode)
         keyEvent.mods = modsFromEvent(event)
         keyEvent.consumed_mods = GHOSTTY_MODS_NONE

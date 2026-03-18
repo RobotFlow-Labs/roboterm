@@ -1,12 +1,23 @@
 import AppKit
 import SwiftUI
 
+// MARK: - RobotFlow Labs Design Tokens
+
+private let rfVoidBlack   = Color(red: 0x05/255, green: 0x05/255, blue: 0x05/255)   // #050505
+private let rfDarkGray    = Color(red: 0x1A/255, green: 0x1A/255, blue: 0x1A/255)   // #1A1A1A
+private let rfElevated    = Color(red: 0x22/255, green: 0x22/255, blue: 0x22/255)   // #222222
+private let rfAccent      = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255)   // #FF3B00
+private let rfPurple      = Color(red: 0x8B/255, green: 0x5C/255, blue: 0xFF/255)   // #8B5CFF
+private let rfGreen       = Color(red: 0x00/255, green: 0xFF/255, blue: 0x88/255)   // #00FF88
+private let rfBorder      = Color(red: 0x33/255, green: 0x33/255, blue: 0x33/255)   // #333333
+
 /// Main window content: sidebar + tab bar + terminal.
 struct ContentView: View {
     @ObservedObject var tabManager: TabManager
     @State private var sidebarWidth: CGFloat = 180
+    @State private var dragStartWidth: CGFloat = 180
 
-    private var bgColor: Color { Color(nsColor: GhosttyManager.shared.backgroundColor) }
+    private var bgColor: Color { rfVoidBlack }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -15,7 +26,7 @@ struct ContentView: View {
                     .frame(width: sidebarWidth)
 
                 Rectangle()
-                    .fill(Color.white.opacity(0.06))
+                    .fill(rfBorder)
                     .frame(width: 1)
                     .padding(.horizontal, 2)
                     .contentShape(Rectangle())
@@ -25,14 +36,27 @@ struct ContentView: View {
                     .gesture(
                         DragGesture(minimumDistance: 1)
                             .onChanged { value in
-                                sidebarWidth = min(max(sidebarWidth + value.translation.width, 120), 400)
+                                sidebarWidth = min(max(dragStartWidth + value.translation.width, 120), 400)
+                            }
+                            .onEnded { _ in
+                                dragStartWidth = sidebarWidth
                             }
                     )
             }
 
             VStack(spacing: 0) {
                 TabBar(tabManager: tabManager)
+                    .frame(height: 36)
+                    .zIndex(2)
+                AgentBar(tabManager: tabManager)
+                    .frame(height: 28)
+                    .zIndex(2)
                 TerminalContainerView(tabManager: tabManager)
+                    .frame(maxHeight: .infinity)
+                    .clipped()
+                StatusBarView(tabManager: tabManager)
+                    .frame(height: 22)
+                    .zIndex(2)
             }
         }
         .background(bgColor)
@@ -44,35 +68,14 @@ struct ContentView: View {
 struct WorkspaceSidebar: View {
     @ObservedObject var tabManager: TabManager
 
-    private var bgColor: Color { Color(nsColor: GhosttyManager.shared.backgroundColor) }
+    private var sidebarBg: Color { rfDarkGray }
 
     var body: some View {
         VStack(spacing: 0) {
             Spacer().frame(height: 8)
 
             // + Workspace at top
-            Button(action: {
-                let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-                let ws = tabManager.createWorkspace(directory: homeDir)
-                ws.createTab()
-            }) {
-                HStack(spacing: 4) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .medium))
-                    Text("Workspace")
-                        .font(.system(size: 11, weight: .medium))
-                }
-                .foregroundColor(.white.opacity(0.3))
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(Color.clear)
-                )
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
+            WorkspaceAddButton(tabManager: tabManager)
             .padding(.horizontal, 8)
             .padding(.bottom, 2)
 
@@ -84,7 +87,9 @@ struct WorkspaceSidebar: View {
                             isSelected: workspace.id == tabManager.selectedWorkspaceId,
                             onClose: { tabManager.closeWorkspace(workspace.id) }
                         )
-                        .onTapGesture { tabManager.selectWorkspace(workspace.id) }
+                        .simultaneousGesture(
+                            TapGesture(count: 1).onEnded { tabManager.selectWorkspace(workspace.id) }
+                        )
                     }
                 }
                 .padding(.horizontal, 8)
@@ -92,7 +97,34 @@ struct WorkspaceSidebar: View {
 
             Spacer()
         }
-        .background(bgColor)
+        .background(sidebarBg)
+    }
+}
+
+struct WorkspaceAddButton: View {
+    @ObservedObject var tabManager: TabManager
+    @State private var isHovering = false
+
+    var body: some View {
+        Button(action: {
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            let ws = tabManager.createWorkspace(directory: homeDir)
+            ws.createTab()
+        }) {
+            HStack(spacing: 4) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10, weight: .medium))
+                Text("Workspace")
+                    .font(.system(size: 11, weight: .medium))
+            }
+            .foregroundColor(isHovering ? rfAccent : .white.opacity(0.3))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -101,6 +133,8 @@ struct WorkspaceItemView: View {
     let isSelected: Bool
     let onClose: () -> Void
     @State private var isHovering = false
+    @State private var isEditing = false
+    @State private var editText = ""
 
     /// The selected tab's title, used for the subtitle line.
     private var activeTabTitle: String {
@@ -119,18 +153,39 @@ struct WorkspaceItemView: View {
     }
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 0) {
+            // Accent indicator bar for selected workspace
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(isSelected ? rfAccent : Color.clear)
+                .frame(width: 3, height: 24)
+                .padding(.trailing, 8)
+
             VStack(alignment: .leading, spacing: 2) {
-                Text(workspace.displayName)
+                if isEditing {
+                    TextField("Name", text: $editText, onCommit: {
+                        let trimmed = editText.trimmingCharacters(in: .whitespaces)
+                        workspace.customName = trimmed.isEmpty ? nil : trimmed
+                        isEditing = false
+                    })
+                    .textFieldStyle(.plain)
                     .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.white.opacity(0.9))
                     .lineLimit(1)
-                    .foregroundColor(isSelected ? .white.opacity(0.9) : .white.opacity(0.5))
+                    .onExitCommand {
+                        isEditing = false
+                    }
+                } else {
+                    Text(workspace.displayName)
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                        .foregroundColor(isSelected ? .white.opacity(0.9) : .white.opacity(0.55))
+                }
 
                 Text(directoryLabel)
                     .font(.system(size: 10))
                     .lineLimit(1)
                     .truncationMode(.middle)
-                    .foregroundColor(isSelected ? .white.opacity(0.4) : .white.opacity(0.2))
+                    .foregroundColor(isSelected ? .white.opacity(0.4) : .white.opacity(0.22))
             }
 
             Spacer()
@@ -147,10 +202,10 @@ struct WorkspaceItemView: View {
             } else {
                 Text("\(workspace.tabs.count)")
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.white.opacity(0.2))
+                    .foregroundColor(.white.opacity(0.22))
             }
         }
-        .padding(.horizontal, 10)
+        .padding(.horizontal, 8)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
@@ -159,6 +214,10 @@ struct WorkspaceItemView: View {
                 .fill(isSelected ? Color.white.opacity(0.06) : isHovering ? Color.white.opacity(0.03) : Color.clear)
         )
         .onHover { isHovering = $0 }
+        .onTapGesture(count: 2) {
+            editText = workspace.customName ?? workspace.displayName
+            isEditing = true
+        }
     }
 }
 
@@ -226,6 +285,11 @@ struct TabBar: View {
         }
         .frame(height: 36)
         .background(bgColor)
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(Color.white.opacity(0.06))
+                .frame(height: 1)
+        }
     }
 }
 
@@ -311,6 +375,14 @@ struct TabItemView: View {
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity)
         .background(isSelected ? Color.white.opacity(0.06) : isHovering ? Color.white.opacity(0.03) : Color.clear)
+        .overlay(alignment: .bottom) {
+            if isSelected {
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(rfAccent)
+                    .frame(height: 2)
+                    .padding(.horizontal, 8)
+            }
+        }
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
     }
@@ -357,19 +429,19 @@ struct SplitDropTargetView<Content: View>: View {
         let halfH = size.height / 2
         switch edge {
         case .leading:
-            Rectangle().fill(Color.blue.opacity(0.15))
+            Rectangle().fill(rfAccent.opacity(0.15))
                 .frame(width: halfW, height: size.height)
                 .position(x: halfW / 2, y: size.height / 2)
         case .trailing:
-            Rectangle().fill(Color.blue.opacity(0.15))
+            Rectangle().fill(rfAccent.opacity(0.15))
                 .frame(width: halfW, height: size.height)
                 .position(x: size.width - halfW / 2, y: size.height / 2)
         case .top:
-            Rectangle().fill(Color.blue.opacity(0.15))
+            Rectangle().fill(rfAccent.opacity(0.15))
                 .frame(width: size.width, height: halfH)
                 .position(x: size.width / 2, y: halfH / 2)
         case .bottom:
-            Rectangle().fill(Color.blue.opacity(0.15))
+            Rectangle().fill(rfAccent.opacity(0.15))
                 .frame(width: size.width, height: halfH)
                 .position(x: size.width / 2, y: size.height - halfH / 2)
         }

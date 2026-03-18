@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE dictionary SYSTEM "file://localhost/System/Library/DTDs/sdef.dtd">
+
+<dictionary title="ROBOTERM Scripting Dictionary">
+  <suite name="ROBOTERM Suite" code="RBTm" description="ROBOTERM scripting support.">
+    <class name="application" code="capp" description="The ROBOTERM application.">
+      <cocoa class="NSApplication"/>
+      <property name="name" code="pnam" type="text" access="r" description="The name of the application."/>
+      <property name="frontmost" code="pisf" type="boolean" access="r" description="Is this the active application?">
+        <cocoa key="isActive"/>
+      </property>
+      <property name="front window" code="RFWn" type="window" access="r" description="The frontmost ROBOTERM window.">
+        <cocoa key="frontWindow"/>
+      </property>
+      <property name="version" code="vers" type="text" access="r" description="The version number of the application."/>
+      <responds-to command="new window">
+        <cocoa method="handleNewWindowScriptCommand:"/>
+      </responds-to>
+      <responds-to command="new tab">
+        <cocoa method="handleNewTabScriptCommand:"/>
+      </responds-to>
+      <responds-to command="quit">
+        <cocoa method="handleQuitScriptCommand:"/>
+      </responds-to>
+
+      <element type="window" access="r">
+        <cocoa key="scriptWindows"/>
+      </element>
+
+      <element type="terminal" access="r">
+        <cocoa key="terminals"/>
+      </element>
+    </class>
+
+    <class name="window" code="Rwnd" plural="windows" description="A ROBOTERM window containing workspaces and tabs.">
+      <cocoa class="RobotermScriptWindow"/>
+      <property name="id" code="ID  " type="text" access="r" description="Stable ID for this window."/>
+      <property name="name" code="pnam" type="text" access="r" description="The title of the window.">
+        <cocoa key="title"/>
+      </property>
+      <property name="selected tab" code="RWsT" type="tab" access="r" description="The selected tab in this window.">
+        <cocoa key="selectedTab"/>
+      </property>
+      <responds-to command="activate window">
+        <cocoa method="handleActivateWindowCommand:"/>
+      </responds-to>
+      <responds-to command="close window">
+        <cocoa method="handleCloseWindowCommand:"/>
+      </responds-to>
+      <element type="tab" access="r">
+        <cocoa key="tabs"/>
+      </element>
+      <element type="terminal" access="r">
+        <cocoa key="terminals"/>
+      </element>
+    </class>
+
+    <class name="tab" code="Rtab" plural="tabs" description="A workspace/tab within a ROBOTERM window.">
+      <cocoa class="RobotermScriptTab"/>
+      <property name="id" code="ID  " type="text" access="r" description="Stable ID for this tab."/>
+      <property name="name" code="pnam" type="text" access="r" description="The title of the tab.">
+        <cocoa key="title"/>
+      </property>
+      <property name="index" code="pidx" type="integer" access="r" description="1-based index of this tab."/>
+      <property name="selected" code="RTsl" type="boolean" access="r" description="Whether this tab is selected."/>
+      <property name="focused terminal" code="RTfT" type="terminal" access="r" description="The currently focused terminal in this tab.">
+        <cocoa key="focusedTerminal"/>
+      </property>
+      <responds-to command="select tab">
+        <cocoa method="handleSelectTabCommand:"/>
+      </responds-to>
+      <responds-to command="close tab">
+        <cocoa method="handleCloseTabCommand:"/>
+      </responds-to>
+      <element type="terminal" access="r">
+        <cocoa key="terminals"/>
+      </element>
+    </class>
+
+    <class name="terminal" code="Rtrm" plural="terminals" description="An individual terminal surface.">
+      <cocoa class="RobotermScriptTerminal"/>
+      <property name="id" code="ID  " type="text" access="r" description="Stable ID for this terminal surface."/>
+      <property name="name" code="pnam" type="text" access="r" description="Current terminal title.">
+        <cocoa key="title"/>
+      </property>
+      <property name="working directory" code="Rwdr" type="text" access="r" description="Current working directory for the terminal process."/>
+      <responds-to command="split">
+        <cocoa method="handleSplitCommand:"/>
+      </responds-to>
+      <responds-to command="focus">
+        <cocoa method="handleFocusCommand:"/>
+      </responds-to>
+      <responds-to command="close">
+        <cocoa method="handleCloseCommand:"/>
+      </responds-to>
+    </class>
+
+    <record-type name="surface configuration" code="RScf" description="Settings applied when creating a terminal.">
+      <property name="initial working directory" code="RScD" type="text" description="Initial working directory.">
+        <cocoa key="workingDirectory"/>
+      </property>
+      <property name="initial input" code="RScI" type="text" description="Input sent after launch.">
+        <cocoa key="initialInput"/>
+      </property>
+    </record-type>
+
+    <enumeration name="split direction" code="RSpD" description="Direction for a new split.">
+      <enumerator name="right" code="RSrt" description="Split to the right."/>
+      <enumerator name="down" code="RSdn" description="Split downward."/>
+    </enumeration>
+
+    <command name="new window" code="RBTmNWin" description="Create a new ROBOTERM window.">
+      <parameter name="with configuration" code="RNwS" type="surface configuration" optional="yes" description="Configuration for initial terminal.">
+        <cocoa key="configuration"/>
+      </parameter>
+      <result type="window" description="The newly created window."/>
+    </command>
+
+    <command name="new tab" code="RBTmNTab" description="Create a new tab.">
+      <parameter name="in" code="RNtW" type="window" optional="yes" description="Target window.">
+        <cocoa key="window"/>
+      </parameter>
+      <parameter name="with configuration" code="RNtS" type="surface configuration" optional="yes" description="Configuration for initial terminal.">
+        <cocoa key="configuration"/>
+      </parameter>
+      <result type="tab" description="The newly created tab."/>
+    </command>
+
+    <command name="split" code="RBTmSplt" description="Split a terminal.">
+      <direct-parameter type="specifier" description="The terminal to split."/>
+      <parameter name="direction" code="RSpd" type="split direction" description="Direction to split.">
+        <cocoa key="direction"/>
+      </parameter>
+      <result type="terminal" description="The newly created terminal."/>
+    </command>
+
+    <command name="focus" code="RBTmFcus" description="Focus a terminal.">
+      <direct-parameter type="specifier" description="The terminal to focus."/>
+    </command>
+
+    <command name="close" code="RBTmClos" description="Close a terminal.">
+      <direct-parameter type="specifier" description="The terminal to close."/>
+    </command>
+
+    <command name="activate window" code="RBTmAcWn" description="Activate a ROBOTERM window.">
+      <direct-parameter type="specifier" description="The window to activate."/>
+    </command>
+
+    <command name="select tab" code="RBTmSlTb" description="Select a tab.">
+      <direct-parameter type="specifier" description="The tab to select."/>
+    </command>
+
+    <command name="close tab" code="RBTmClTb" description="Close a tab.">
+      <direct-parameter type="specifier" description="The tab to close."/>
+    </command>
+
+    <command name="close window" code="RBTmClWn" description="Close a window.">
+      <direct-parameter type="specifier" description="The window to close."/>
+    </command>
+
+    <command name="input text" code="RBTmInTx" description="Input text to a terminal as if pasted.">
+      <cocoa class="RobotermScriptInputTextCommand"/>
+      <direct-parameter type="text" description="The text to input."/>
+      <parameter name="to" code="RItT" type="terminal" description="Target terminal.">
+        <cocoa key="terminal"/>
+      </parameter>
+    </command>
+  </suite>
+
+  <suite name="Standard Suite" code="????" description="Common classes and commands for all applications.">
+    <command name="count" code="corecnte" description="Return the number of elements of a particular class within an object.">
+      <cocoa class="NSCountCommand"/>
+      <access-group identifier="*"/>
+      <direct-parameter type="specifier" requires-access="r" description="The objects to be counted."/>
+      <parameter name="each" code="kocl" type="type" optional="yes" description="The class of objects to be counted." hidden="yes">
+        <cocoa key="ObjectClass"/>
+      </parameter>
+      <result type="integer" description="The count."/>
+    </command>
+
+    <command name="exists" code="coredoex" description="Verify that an object exists.">
+      <cocoa class="NSExistsCommand"/>
+      <access-group identifier="*"/>
+      <direct-parameter type="any" requires-access="r" description="The object(s) to check."/>
+      <result type="boolean" description="Did the object(s) exist?"/>
+    </command>
+
+    <command name="quit" code="aevtquit" description="Quit the application.">
+      <cocoa class="NSQuitCommand"/>
+    </command>
+  </suite>
+</dictionary>

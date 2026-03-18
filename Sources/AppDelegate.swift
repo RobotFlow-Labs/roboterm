@@ -20,10 +20,25 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Force Ghostty initialization
         _ = GhosttyManager.shared
 
-        createNewWindow()
+        // Try to restore a previous session
+        var restored = false
+        if let session = SessionStore.restore() {
+            restored = SessionStore.apply(session, to: self)
+            if restored {
+                SessionStore.clear()
+            }
+        }
+
+        if !restored {
+            createNewWindow()
+        }
 
         // Build main menu
         NSApp.mainMenu = buildMainMenu()
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        SessionStore.save(tabManagers: tabManagers)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -32,9 +47,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Window management
 
-    func createNewWindow() {
-        let tabManager = TabManager()
+    func registerTabManager(_ tabManager: TabManager) {
         tabManagers.append(tabManager)
+    }
+
+    func createWindowForTabManager(_ tabManager: TabManager) {
+        if !tabManagers.contains(where: { $0 === tabManager }) {
+            tabManagers.append(tabManager)
+        }
 
         let contentView = ContentView(tabManager: tabManager)
         let window = NSWindow(
@@ -47,7 +67,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.titlebarAppearsTransparent = true
         window.titleVisibility = .hidden
         window.titlebarSeparatorStyle = .none
-        window.title = "ghast"
+        window.title = "ROBOTERM"
         window.backgroundColor = GhosttyManager.shared.backgroundColor
         window.isOpaque = GhosttyManager.shared.backgroundOpacity >= 1.0
         window.delegate = self
@@ -57,6 +77,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         tabManager.window = window
     }
 
+    func createNewWindow() {
+        let tabManager = TabManager()
+        createWindowForTabManager(tabManager)
+    }
+
     // MARK: - Menu
 
     private func buildMainMenu() -> NSMenu {
@@ -64,9 +89,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // App menu
         let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About ghast", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
+        appMenu.addItem(withTitle: "About ROBOTERM", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit ghast", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+        appMenu.addItem(withTitle: "Quit ROBOTERM", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
         let appMenuItem = NSMenuItem()
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
@@ -120,6 +145,61 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         let editMenuItem = NSMenuItem()
         editMenuItem.submenu = editMenu
         mainMenu.addItem(editMenuItem)
+
+        // Robotics menu
+        let roboticsMenu = NSMenu(title: "Robotics")
+
+        // ROS2 section
+        roboticsMenu.addItem(withTitle: "ROS2 Node List", action: #selector(ros2NodeList(_:)), keyEquivalent: "")
+        roboticsMenu.addItem(withTitle: "ROS2 Topic List", action: #selector(ros2TopicList(_:)), keyEquivalent: "")
+        roboticsMenu.addItem(withTitle: "ROS2 Service List", action: #selector(ros2ServiceList(_:)), keyEquivalent: "")
+        roboticsMenu.addItem(.separator())
+
+        // Quick commands
+        let ros2LaunchItem = NSMenuItem(title: "Launch...", action: nil, keyEquivalent: "")
+        let launchSubmenu = NSMenu(title: "Launch")
+        launchSubmenu.addItem(withTitle: "ros2 launch", action: #selector(ros2Launch(_:)), keyEquivalent: "l")
+        launchSubmenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
+        launchSubmenu.addItem(withTitle: "ros2 bag record", action: #selector(ros2BagRecord(_:)), keyEquivalent: "")
+        launchSubmenu.addItem(withTitle: "ros2 bag play", action: #selector(ros2BagPlay(_:)), keyEquivalent: "")
+        ros2LaunchItem.submenu = launchSubmenu
+        roboticsMenu.addItem(ros2LaunchItem)
+        roboticsMenu.addItem(.separator())
+
+        // Simulation
+        let simItem = NSMenuItem(title: "Simulation", action: nil, keyEquivalent: "")
+        let simSubmenu = NSMenu(title: "Simulation")
+        simSubmenu.addItem(withTitle: "Gazebo", action: #selector(launchGazebo(_:)), keyEquivalent: "")
+        simSubmenu.addItem(withTitle: "RViz2", action: #selector(launchRViz2(_:)), keyEquivalent: "")
+        simSubmenu.addItem(withTitle: "MuJoCo", action: #selector(launchMuJoCo(_:)), keyEquivalent: "")
+        simItem.submenu = simSubmenu
+        roboticsMenu.addItem(simItem)
+        roboticsMenu.addItem(.separator())
+
+        // ANIMA section
+        let animaItem = NSMenuItem(title: "ANIMA", action: nil, keyEquivalent: "")
+        let animaSubmenu = NSMenu(title: "ANIMA")
+        animaSubmenu.addItem(withTitle: "Module Status", action: #selector(animaStatus(_:)), keyEquivalent: "")
+        animaSubmenu.addItem(withTitle: "docker compose up", action: #selector(animaComposeUp(_:)), keyEquivalent: "")
+        animaSubmenu.addItem(withTitle: "docker compose down", action: #selector(animaComposeDown(_:)), keyEquivalent: "")
+        animaSubmenu.addItem(.separator())
+        animaSubmenu.addItem(withTitle: "View Logs", action: #selector(animaLogs(_:)), keyEquivalent: "")
+        animaItem.submenu = animaSubmenu
+        roboticsMenu.addItem(animaItem)
+        roboticsMenu.addItem(.separator())
+
+        // Hardware
+        let hwItem = NSMenuItem(title: "Hardware", action: nil, keyEquivalent: "")
+        let hwSubmenu = NSMenu(title: "Hardware")
+        hwSubmenu.addItem(withTitle: "Camera Status", action: #selector(hwCamera(_:)), keyEquivalent: "")
+        hwSubmenu.addItem(withTitle: "LiDAR Status", action: #selector(hwLidar(_:)), keyEquivalent: "")
+        hwSubmenu.addItem(withTitle: "SSH to Robot...", action: #selector(hwSSH(_:)), keyEquivalent: "")
+        hwItem.submenu = hwSubmenu
+        roboticsMenu.addItem(hwItem)
+
+        let roboticsMenuItem = NSMenuItem()
+        roboticsMenuItem.submenu = roboticsMenu
+        mainMenu.addItem(roboticsMenuItem)
 
         return mainMenu
     }
@@ -191,6 +271,39 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             ws.selectTab(ws.tabs[index].id)
         }
     }
+
+    // MARK: - Robotics menu actions
+
+    private func runCommandInNewTab(_ command: String) {
+        guard let mgr = focusedTabManager else { return }
+        let tab = mgr.createTab()
+        // Send command after terminal initializes
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            if let surface = tab.terminalView?.surface {
+                let cmd = command + "\n"
+                cmd.withCString { ptr in
+                    ghostty_surface_text(surface, ptr, UInt(cmd.utf8.count))
+                }
+            }
+        }
+    }
+
+    @objc private func ros2NodeList(_ sender: Any?) { runCommandInNewTab("ros2 node list") }
+    @objc private func ros2TopicList(_ sender: Any?) { runCommandInNewTab("ros2 topic list") }
+    @objc private func ros2ServiceList(_ sender: Any?) { runCommandInNewTab("ros2 service list") }
+    @objc private func ros2Launch(_ sender: Any?) { runCommandInNewTab("ros2 launch ") }
+    @objc private func ros2BagRecord(_ sender: Any?) { runCommandInNewTab("ros2 bag record -a") }
+    @objc private func ros2BagPlay(_ sender: Any?) { runCommandInNewTab("ros2 bag play ") }
+    @objc private func launchGazebo(_ sender: Any?) { runCommandInNewTab("gz sim") }
+    @objc private func launchRViz2(_ sender: Any?) { runCommandInNewTab("rviz2") }
+    @objc private func launchMuJoCo(_ sender: Any?) { runCommandInNewTab("python3 -m mujoco.viewer") }
+    @objc private func animaStatus(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
+    @objc private func animaComposeUp(_ sender: Any?) { runCommandInNewTab("docker compose up -d") }
+    @objc private func animaComposeDown(_ sender: Any?) { runCommandInNewTab("docker compose down") }
+    @objc private func animaLogs(_ sender: Any?) { runCommandInNewTab("docker compose logs -f --tail=50") }
+    @objc private func hwCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /camera/image_raw --once") }
+    @objc private func hwLidar(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /scan --once") }
+    @objc private func hwSSH(_ sender: Any?) { runCommandInNewTab("ssh ") }
 }
 
 // MARK: - NSWindowDelegate

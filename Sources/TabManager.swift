@@ -29,10 +29,13 @@ final class TabManager: ObservableObject {
 
     private var focusObserver: Any?
 
-    init() {
-        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-        let workspace = addWorkspace(directory: homeDir)
-        workspace.createTab()
+    /// When `restoring` is true, skip creating a default workspace+tab (the caller will populate).
+    init(restoring: Bool = false) {
+        if !restoring {
+            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+            let workspace = addWorkspace(directory: homeDir)
+            workspace.createTab()
+        }
 
         focusObserver = NotificationCenter.default.addObserver(
             forName: .terminalViewDidFocus, object: nil, queue: .main
