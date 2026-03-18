@@ -1,13 +1,19 @@
 # ROBOTERM — RobotFlow Labs Industrial Cyberpunk Theme
+# https://github.com/RobotFlow-Labs/roboterm
 
+# Background & foreground
 background = 050505
 foreground = f3f3f3
+background-opacity = 0.95
 
+# Cursor — orange block
 cursor-color = FF3B00
 cursor-style = block
+cursor-style-blink = false
 
-selection-background = 333333
-selection-foreground = f3f3f3
+# Selection
+selection-background = FF3B00
+selection-foreground = 050505
 
 # Industrial Cyberpunk palette
 palette = 0=1A1A1A
@@ -27,8 +33,17 @@ palette = 13=FF77DD
 palette = 14=33EEFF
 palette = 15=FFFFFF
 
+# Font
 font-family = JetBrains Mono
 font-size = 13
+font-feature = -calt
 
-window-padding-x = 4
+# Window
+window-padding-x = 6
 window-padding-y = 4
+window-padding-color = background
+unfocused-split-opacity = 0.7
+
+# Shell integration
+shell-integration = detect
+shell-integration-features = cursor,sudo,title
