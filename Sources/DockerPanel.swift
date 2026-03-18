@@ -193,7 +193,7 @@ struct DockerPanelView: View {
                             }
                         }
                     }
-                    .frame(maxHeight: 300)
+                    .frame(maxHeight: .infinity)
                 }
             }
         }

@@ -52,24 +52,6 @@ struct StatusBarView: View {
                 .lineLimit(1)
                 .truncationMode(.head)
 
-            separatorView
-
-            // Hardware devices
-            ForEach(HardwareState.shared.devices.filter { $0.status == .connected }) { device in
-                HStack(spacing: 3) {
-                    Circle()
-                        .fill(device.type == .camera ? sbCyan :
-                              device.type == .compute ? sbGreen :
-                              device.type == .lidar ? sbAccent : sbDim)
-                        .frame(width: 4, height: 4)
-                    Text(device.name.uppercased())
-                        .font(.system(size: 8, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white.opacity(0.4))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 2)
-            }
-
             Spacer()
 
             // Right: system stats + clock

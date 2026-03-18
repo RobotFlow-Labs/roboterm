@@ -93,7 +93,7 @@ struct WorkspaceSidebar: View {
             Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
                 .padding(.horizontal, 8)
 
-            // Workspaces list takes available space above hardware
+            // Workspaces list — flexible, shrinks when bottom panels expand
             ScrollView(.vertical, showsIndicators: false) {
                 VStack(spacing: 2) {
                     ForEach(tabManager.workspaces) { workspace in
@@ -108,9 +108,9 @@ struct WorkspaceSidebar: View {
                 .padding(.horizontal, 6)
                 .padding(.top, 6)
             }
-            .layoutPriority(1)
+            .frame(minHeight: 60)
 
-            // Docker containers section
+            // Docker containers section — expands with scroll
             DockerPanelView(tabManager: tabManager)
 
             // Hardware section
