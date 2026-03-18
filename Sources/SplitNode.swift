@@ -58,7 +58,7 @@ final class SplitNode: Identifiable, ObservableObject {
     @discardableResult
     func splitTab(_ tabId: UUID, with newTabId: UUID, direction: SplitDirection) -> Bool {
         guard let leaf = findLeaf(for: tabId) else { return false }
-        guard case .tab(_) = leaf.content else { return false }
+        guard case .tab = leaf.content else { return false }
 
         let firstChild = SplitNode(tabId: tabId)
         let secondChild = SplitNode(tabId: newTabId)
@@ -76,7 +76,7 @@ final class SplitNode: Identifiable, ObservableObject {
     /// Returns true if found and removed.
     func removeTab(_ targetId: UUID) -> Bool {
         switch content {
-        case .tab(_):
+        case .tab:
             return false // Can't remove self from self
 
         case .split(_, let first, let second, _):

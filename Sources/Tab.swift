@@ -16,19 +16,28 @@ final class Tab: Identifiable, ObservableObject {
     /// Working directory to use when creating the terminal.
     var initialWorkingDirectory: String?
 
+    /// SSH connection config (nil = local shell tab).
+    var sshConfig: SSHConnectionConfig?
+
+    /// Whether this tab is an SSH connection.
+    var isSSH: Bool { sshConfig != nil }
+
     /// The terminal view is created lazily when the tab becomes visible.
     private(set) var terminalView: RobotermTerminal?
 
-    init(id: UUID = UUID(), title: String = "Terminal", workingDirectory: String? = nil) {
+    init(id: UUID = UUID(), title: String = "Terminal", workingDirectory: String? = nil,
+         sshConfig: SSHConnectionConfig? = nil) {
         self.id = id
-        self.title = title
+        self.sshConfig = sshConfig
+        self.title = sshConfig != nil ? "[SSH] \(sshConfig!.label)" : title
         self.initialWorkingDirectory = workingDirectory
     }
 
     /// Creates and returns the terminal NSView for embedding in the window.
     func makeRobotermTerminal(frame: NSRect) -> RobotermTerminal {
         if let existing = terminalView { return existing }
-        let view = RobotermTerminal(frame: frame, tabId: id, workingDirectory: initialWorkingDirectory)
+        let view = RobotermTerminal(frame: frame, tabId: id, workingDirectory: initialWorkingDirectory,
+                                     sshConfig: sshConfig)
         terminalView = view
         return view
     }

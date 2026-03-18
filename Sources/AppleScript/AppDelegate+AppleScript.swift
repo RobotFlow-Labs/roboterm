@@ -113,7 +113,7 @@ extension NSApplication {
         }
 
         // Parse optional configuration
-        var workingDir = FileManager.default.homeDirectoryForCurrentUser.path
+        var workingDir = TerminalSettings.shared.defaultWorkingDirectory
         if let config = command.evaluatedArguments?["configuration"] as? NSDictionary,
            let raw = config as? [String: Any],
            let dir = raw["workingDirectory"] as? String, !dir.isEmpty {

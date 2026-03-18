@@ -38,8 +38,15 @@ final class DockerState: ObservableObject {
     private init() {
         refresh()
         timer = Timer.scheduledTimer(withTimeInterval: 10, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refresh() }
+            MainActor.assumeIsolated {
+                guard SidebarVisibility.shared.isVisible else { return }
+                self?.refresh()
+            }
         }
+    }
+
+    deinit {
+        timer?.invalidate()
     }
 
     func refresh() {
@@ -55,23 +62,31 @@ final class DockerState: ObservableObject {
         }
     }
 
+    /// Shell-escape a container ID/name for safe interpolation (single-quote prevents expansion).
+    private func esc(_ s: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        if s.unicodeScalars.allSatisfy({ allowed.contains($0) }) { return s }
+        // Single-quote the string, escaping embedded single quotes
+        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     func startContainer(_ id: String) {
-        runDockerCmd("docker start \(id)")
+        runDockerCmd("docker start \(esc(id))")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.refresh() }
     }
 
     func stopContainer(_ id: String) {
-        runDockerCmd("docker stop \(id)")
+        runDockerCmd("docker stop \(esc(id))")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.refresh() }
     }
 
     func restartContainer(_ id: String) {
-        runDockerCmd("docker restart \(id)")
+        runDockerCmd("docker restart \(esc(id))")
         DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.refresh() }
     }
 
     func removeContainer(_ id: String) {
-        runDockerCmd("docker rm -f \(id)")
+        runDockerCmd("docker rm -f \(esc(id))")
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) { self.refresh() }
     }
 
@@ -83,19 +98,31 @@ final class DockerState: ObservableObject {
             task.standardOutput = FileHandle.nullDevice
             task.standardError = FileHandle.nullDevice
             try? task.run()
+            // Kill after 10 seconds to prevent hangs
+            DispatchQueue.global().asyncAfter(deadline: .now() + 10) {
+                if task.isRunning { task.terminate() }
+            }
             task.waitUntilExit()
         }
     }
 
-    private static func listContainers() -> [DockerContainer] {
+    nonisolated private static func listContainers() -> [DockerContainer] {
         let task = Process()
         let pipe = Pipe()
         task.launchPath = "/bin/bash"
-        task.arguments = ["-c", "export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH && docker ps -a --format '{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}|{{.Label \"com.docker.compose.project\"}}' 2>/dev/null"]
+        let fmt = "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}|{{.Label \"com.docker.compose.project\"}}"
+        task.arguments = [
+            "-c",
+            "export PATH=/usr/local/bin:/opt/homebrew/bin:$PATH && docker ps -a --format '\(fmt)' 2>/dev/null"
+        ]
         task.standardOutput = pipe
         task.standardError = FileHandle.nullDevice
         do {
             try task.run()
+            // Kill after 5 seconds to prevent hangs
+            DispatchQueue.global().asyncAfter(deadline: .now() + 5) {
+                if task.isRunning { task.terminate() }
+            }
             task.waitUntilExit()
         } catch { return [] }
 
@@ -123,21 +150,14 @@ final class DockerState: ObservableObject {
     }
 }
 
-// MARK: - Design tokens
-
-private let dpAccent  = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255)
-private let dpGreen   = Color(red: 0x00/255, green: 0xFF/255, blue: 0x88/255)
-private let dpCyan    = Color(red: 0x00/255, green: 0xDD/255, blue: 0xFF/255)
-private let dpYellow  = Color(red: 0xFF/255, green: 0xB8/255, blue: 0x00/255)
-private let dpDim     = Color.white.opacity(0.3)
-private let dpBg      = Color(red: 0x08/255, green: 0x08/255, blue: 0x08/255)
+// Design tokens: use RF namespace from DesignTokens.swift
 
 // MARK: - Docker Panel View
 
 struct DockerPanelView: View {
     @ObservedObject private var state = DockerState.shared
     @ObservedObject var tabManager: TabManager
-    @State private var isExpanded = true
+    @State private var isExpanded: Bool = UserDefaults.standard.object(forKey: "panelExpanded.docker") as? Bool ?? true
 
     private var runningCount: Int {
         state.containers.filter { $0.status == .running }.count
@@ -146,7 +166,10 @@ struct DockerPanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Clickable header to expand/collapse
-            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+                UserDefaults.standard.set(isExpanded, forKey: "panelExpanded.docker")
+            }) {
                 DockerPanelHeader(
                     runningCount: runningCount,
                     totalCount: state.containers.count,
@@ -157,7 +180,7 @@ struct DockerPanelView: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                Rectangle().fill(dpCyan.opacity(0.15)).frame(height: 1)
+                Rectangle().fill(RF.cyan.opacity(0.15)).frame(height: 1)
                     .padding(.horizontal, 8)
 
                 if state.containers.isEmpty {
@@ -201,19 +224,28 @@ struct DockerPanelView: View {
 
     // MARK: - Actions
 
+    /// Shell-escape for terminal commands (container names can contain special chars).
+    private func shellEsc(_ s: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_."))
+        if s.unicodeScalars.allSatisfy({ allowed.contains($0) }) { return s }
+        return "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
     private func openShell(_ container: DockerContainer) {
         guard let ws = tabManager.selectedWorkspace else { return }
+        let name = shellEsc(container.name)
         let tab = ws.createTab()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            tab.terminalView?.sendText("docker exec -it \(container.name) bash\n")
+            tab.terminalView?.sendText("docker exec -it \(name) bash\n")
         }
     }
 
     private func openLogs(_ container: DockerContainer) {
         guard let ws = tabManager.selectedWorkspace else { return }
+        let name = shellEsc(container.name)
         let tab = ws.createTab()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            tab.terminalView?.sendText("docker logs -f --tail=100 \(container.name)\n")
+            tab.terminalView?.sendText("docker logs -f --tail=100 \(name)\n")
         }
     }
 }
@@ -230,27 +262,27 @@ private struct DockerPanelHeader: View {
         HStack(spacing: 6) {
             Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                 .font(.system(size: 8, weight: .bold))
-                .foregroundStyle(dpCyan.opacity(0.5))
+                .foregroundStyle(RF.cyan.opacity(0.5))
                 .frame(width: 10)
 
             Text("CONTAINERS")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(dpCyan.opacity(0.8))
+                .foregroundStyle(RF.cyan.opacity(0.8))
                 .tracking(1.5)
 
             Spacer()
 
             HStack(spacing: 3) {
-                Circle().fill(runningCount > 0 ? dpGreen : dpDim).frame(width: 5, height: 5)
+                Circle().fill(runningCount > 0 ? RF.green : RF.dim).frame(width: 5, height: 5)
                 Text("\(runningCount)/\(totalCount)")
                     .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundStyle(runningCount > 0 ? dpGreen.opacity(0.7) : dpDim)
+                    .foregroundStyle(runningCount > 0 ? RF.green.opacity(0.7) : RF.dim)
             }
 
             Button(action: { onRefresh() }) {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 9))
-                    .foregroundStyle(dpDim)
+                    .foregroundStyle(RF.dim)
             }
             .buttonStyle(.plain)
         }
@@ -267,10 +299,10 @@ private struct DockerEmptyState: View {
         VStack(spacing: 4) {
             Text("NO CONTAINERS")
                 .font(.system(size: 9, weight: .medium, design: .monospaced))
-                .foregroundStyle(dpDim)
+                .foregroundStyle(RF.dim)
             Text("docker compose up")
                 .font(.system(size: 8, design: .monospaced))
-                .foregroundStyle(dpCyan.opacity(0.4))
+                .foregroundStyle(RF.cyan.opacity(0.4))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
@@ -289,10 +321,10 @@ private struct DockerGroupHeader: View {
         HStack(spacing: 5) {
             Image(systemName: "shippingbox")
                 .font(.system(size: 9))
-                .foregroundStyle(dpCyan.opacity(0.5))
+                .foregroundStyle(RF.cyan.opacity(0.5))
             Text(name)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(dpCyan.opacity(0.7))
+                .foregroundStyle(RF.cyan.opacity(0.7))
             Spacer()
         }
         .padding(.horizontal, 12)
@@ -316,9 +348,9 @@ private struct DockerContainerRow: View {
 
     private var statusColor: Color {
         switch container.status {
-        case .running: return dpGreen
-        case .paused:  return dpYellow
-        case .stopped: return dpDim
+        case .running: return RF.green
+        case .paused:  return RF.yellow
+        case .stopped: return RF.dim
         }
     }
 
@@ -339,7 +371,7 @@ private struct DockerContainerRow: View {
             // Image name (bold) + container name (dim)
             Text(shortImage)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(isHovering ? dpCyan : .white.opacity(0.6))
+                .foregroundStyle(isHovering ? RF.cyan : .white.opacity(0.6))
                 .lineLimit(1)
 
             Text(container.name)
@@ -364,7 +396,7 @@ private struct DockerContainerRow: View {
         .padding(.leading, indented ? 24 : 12)
         .padding(.trailing, 12)
         .padding(.vertical, 4)
-        .background(isHovering ? dpCyan.opacity(0.04) : Color.clear)
+        .background(isHovering ? RF.cyan.opacity(0.04) : Color.clear)
         .contentShape(Rectangle())
         .onHover { isHovering = $0 }
         .contextMenu {
@@ -394,12 +426,12 @@ private struct ContainerActions: View {
     var body: some View {
         HStack(spacing: 5) {
             if status == .running {
-                ActionButton(icon: "terminal", color: dpCyan, help: "Shell", action: onShell)
-                ActionButton(icon: "doc.text", color: dpGreen, help: "Logs", action: onLogs)
-                ActionButton(icon: "stop.fill", color: dpAccent, help: "Stop", action: onStop)
+                ActionButton(icon: "terminal", color: RF.cyan, help: "Shell", action: onShell)
+                ActionButton(icon: "doc.text", color: RF.green, help: "Logs", action: onLogs)
+                ActionButton(icon: "stop.fill", color: RF.accent, help: "Stop", action: onStop)
             } else {
-                ActionButton(icon: "play.fill", color: dpGreen, help: "Start", action: onStart)
-                ActionButton(icon: "trash", color: dpAccent.opacity(0.6), help: "Remove", action: onRemove)
+                ActionButton(icon: "play.fill", color: RF.green, help: "Start", action: onStart)
+                ActionButton(icon: "trash", color: RF.accent.opacity(0.6), help: "Remove", action: onRemove)
             }
         }
     }
@@ -444,6 +476,7 @@ private struct ContainerContextMenu: View {
             Button("Stop", action: onStop)
         } else {
             Button("Start", action: onStart)
+                .disabled(status == .paused)
             Divider()
             Button("Remove", action: onRemove)
         }

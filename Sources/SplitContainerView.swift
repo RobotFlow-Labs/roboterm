@@ -5,7 +5,7 @@ import Foundation
 class SplitContainerView: NSView {
     private var currentLayout: SplitNode?
     private var dividerViews: [DividerView] = []
-    private var tabLookup: ((UUID) -> Tab?)? = nil
+    private var tabLookup: ((UUID) -> Tab?)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)

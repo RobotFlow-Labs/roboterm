@@ -20,7 +20,7 @@ echo " |  _ <| |_| | |_) | |_| || | | |___|  _ <| |  | |"
 echo " |_| \\_\\\\___/|____/ \\___/ |_| |_____|_| \\_\\_|  |_|"
 echo -e "${R}"
 echo -e "${D}  The first ROS2-native agentic terminal for Apple Silicon${R}"
-echo -e "${D}  Built by RobotFlow Labs • Powered by GhosttyKit (Metal GPU)${R}"
+echo -e "${D}  Built by RobotFlow Labs • Pure Swift • SwiftTerm Engine${R}"
 echo ""
 
 sleep 2
@@ -29,11 +29,11 @@ echo -e "${O}━━━ WHAT MAKES ROBOTERM DIFFERENT ━━━${R}"
 echo ""
 echo -e "  ${G}●${R} ${B}Agent Launcher Bar${R} — One-click Claude Code & Codex"
 echo -e "  ${G}●${R} ${B}60+ ROS2 Commands${R} — Menus, right-click, agent bar"
-echo -e "  ${G}●${R} ${B}20 CLI Commands${R}   — rt init, rt nodes, rt topics, rt build..."
+echo -e "  ${G}●${R} ${B}30 CLI Commands${R}   — rt init, rt nodes, rt topics, rt build..."
+echo -e "  ${G}●${R} ${B}Native SSH${R}        — Direct PTY, sidebar panel, one-click connect"
 echo -e "  ${G}●${R} ${B}Hardware Detection${R} — IOKit USB hotplug (ZED, RealSense, LiDAR)"
 echo -e "  ${G}●${R} ${B}AppleScript${R}       — Full Cocoa scripting support"
-echo -e "  ${G}●${R} ${B}Status Bar${R}        — Live CPU/MEM/git/ROS2/hardware"
-echo -e "  ${G}●${R} ${B}<0.5% CPU${R}         — Zero overhead vs plain Ghostty"
+echo -e "  ${G}●${R} ${B}Status Bar${R}        — Live CPU/MEM/git/ROS2/SSH info"
 echo ""
 
 sleep 2

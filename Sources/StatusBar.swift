@@ -1,15 +1,6 @@
 import AppKit
 import SwiftUI
 
-// MARK: - Design tokens (shared with ContentView)
-
-private let sbBg      = Color(red: 0x0A/255, green: 0x0A/255, blue: 0x0A/255)
-private let sbAccent  = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255)
-private let sbGreen   = Color(red: 0x00/255, green: 0xFF/255, blue: 0x88/255)
-private let sbCyan    = Color(red: 0x00/255, green: 0xDD/255, blue: 0xFF/255)
-private let sbDim     = Color.white.opacity(0.35)
-private let sbBorder  = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255).opacity(0.3)
-
 /// Bottom status bar — lightweight system info.
 /// Updates on: tab switch, directory change, 10-second timer.
 struct StatusBarView: View {
@@ -21,60 +12,91 @@ struct StatusBarView: View {
     @State private var memUsage: String = ""
     @State private var clock: String = ""
     @State private var cwd: String = "~"
+    @State private var lastGitDir: String = ""
 
     private let timer = Timer.publish(every: 10, on: .main, in: .common).autoconnect()
     private let clockTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
+    /// Whether the currently selected tab is an SSH connection.
+    private var isSSHTab: Bool {
+        tabManager.selectedTab?.isSSH ?? false
+    }
+
+    /// SSH connection label for the status bar.
+    private var sshLabel: String {
+        guard let ssh = tabManager.selectedTab?.sshConfig else { return "" }
+        let userHost = ssh.user.isEmpty ? ssh.host : "\(ssh.user)@\(ssh.host)"
+        return ssh.port != 22 ? "\(userHost):\(ssh.port)" : userHost
+    }
+
     var body: some View {
         HStack(spacing: 0) {
-            // Left: ROS2 info
-            if !rosDistro.isEmpty {
-                statusDot(color: sbGreen)
-                statusLabel("ROS2:", value: rosDistro, valueColor: sbGreen)
+            if isSSHTab {
+                // SSH tab: show connection info instead of local CWD/git
+                Image(systemName: "network")
+                    .font(.system(size: 9))
+                    .foregroundColor(RF.cyan)
+                    .padding(.trailing, 4)
+                Text("SSH")
+                    .font(.system(size: 9, weight: .bold, design: .monospaced))
+                    .foregroundColor(RF.cyan)
                 separatorView
-                statusLabel("DOMAIN:", value: rosDomain.isEmpty ? "0" : rosDomain, valueColor: sbAccent)
-                separatorView
-            }
-
-            // Git branch
-            if !gitBranch.isEmpty {
-                Text("\u{2387}")
+                Text(sshLabel)
                     .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(sbDim)
-                statusLabel("", value: gitBranch, valueColor: sbAccent)
-                separatorView
-            }
+                    .foregroundColor(RF.dim)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            } else {
+                // Left: ROS2 info
+                if !rosDistro.isEmpty {
+                    statusDot(color: RF.green)
+                    statusLabel("ROS2:", value: rosDistro, valueColor: RF.green)
+                    separatorView
+                    statusLabel("DOMAIN:", value: rosDomain.isEmpty ? "0" : rosDomain, valueColor: RF.accent)
+                    separatorView
+                }
 
-            // CWD
-            Text(cwd)
-                .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(sbDim)
-                .lineLimit(1)
-                .truncationMode(.head)
+                // Git branch
+                if !gitBranch.isEmpty {
+                    Text("\u{2387}")
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundColor(RF.dim)
+                    statusLabel("", value: gitBranch, valueColor: RF.accent)
+                    separatorView
+                }
+
+                // CWD
+                Text(cwd)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(RF.dim)
+                    .lineLimit(1)
+                    .truncationMode(.head)
+            }
 
             Spacer()
 
             // Right: system stats + clock
-            statusLabel("CPU:", value: cpuUsage, valueColor: sbAccent)
+            statusLabel("CPU:", value: cpuUsage, valueColor: RF.accent)
             separatorView
-            statusLabel("MEM:", value: memUsage, valueColor: sbAccent)
+            statusLabel("MEM:", value: memUsage, valueColor: RF.accent)
             separatorView
             Text(clock)
                 .font(.system(size: 10, design: .monospaced))
-                .foregroundColor(sbDim)
+                .foregroundColor(RF.dim)
                 .padding(.trailing, 8)
         }
         .padding(.horizontal, 12)
         .frame(height: 22)
         .frame(minHeight: 22, maxHeight: 22)
-        .background(sbBg)
+        .background(RF.barBg)
         .overlay(alignment: .top) {
-            Rectangle().fill(sbBorder).frame(height: 1)
+            Rectangle().fill(RF.accent.opacity(0.3)).frame(height: 1)
         }
         .onAppear { refresh() }
         .onReceive(timer) { _ in refresh() }
         .onReceive(clockTimer) { _ in updateClock() }
-        .onChange(of: tabManager.selectedWorkspaceId) { _ in refresh() }
+        .onChange(of: tabManager.selectedWorkspaceId) { _ in lastGitDir = ""; refresh() }
+        .onChange(of: tabManager.selectedWorkspace?.selectedTabId) { _ in lastGitDir = ""; refresh() }
     }
 
     // MARK: - Subviews
@@ -91,7 +113,7 @@ struct StatusBarView: View {
             if !label.isEmpty {
                 Text(label)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
-                    .foregroundColor(sbDim)
+                    .foregroundColor(RF.dim)
             }
             Text(value)
                 .font(.system(size: 10, weight: .medium, design: .monospaced))
@@ -109,11 +131,13 @@ struct StatusBarView: View {
     // MARK: - Data refresh
 
     private func refresh() {
-        updateCwd()
-        updateGitBranch()
-        updateROS2()
+        // Skip local-only updates for SSH tabs
+        if !isSSHTab {
+            updateCwd()
+            updateGitBranch()
+            updateROS2()
+        }
         updateSystemStats()
-        updateClock()
     }
 
     private func updateCwd() {
@@ -132,6 +156,9 @@ struct StatusBarView: View {
     private func updateGitBranch() {
         let dir = tabManager.selectedTab?.currentDirectory
             ?? tabManager.selectedWorkspace?.directory ?? ""
+        // Skip if directory hasn't changed since last check
+        if dir == lastGitDir { return }
+        lastGitDir = dir
         // Walk up to find .git/HEAD
         var current = dir
         while !current.isEmpty && current != "/" {
@@ -180,6 +207,8 @@ struct StatusBarView: View {
                 let usage = ((user + system) / total) * 100
                 cpuUsage = String(format: "%.0f%%", usage)
             }
+        } else {
+            cpuUsage = "N/A"
         }
 
         // Memory
@@ -201,6 +230,8 @@ struct StatusBarView: View {
             let compressed = UInt64(vmStats.compressor_page_count) * pageSize
             let usedGB = Double(active + wired + compressed) / 1_073_741_824
             memUsage = String(format: "%.0fGB/%.0fGB", usedGB, totalGB)
+        } else {
+            memUsage = "N/A"
         }
     }
 

@@ -2,8 +2,8 @@ import AppKit
 
 /// AppleScript-facing wrapper around a ROBOTERM window (TabManager).
 ///
-/// ROBOTERM uses TabManager per window (unlike Ghostty which uses one NSWindow per tab).
-/// This simplifies the mapping considerably.
+/// ROBOTERM uses one TabManager per window. Each TabManager manages multiple workspaces,
+/// each containing multiple tabs (terminals).
 @MainActor
 @objc(RobotermScriptWindow)
 final class ScriptWindow: NSObject {

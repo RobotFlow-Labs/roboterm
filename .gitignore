@@ -11,10 +11,10 @@ build/
 *.xccheckout
 *.moved-aside
 
-# Ghostty build artifacts (large)
-ghostty/zig-out/
-ghostty/zig-cache/
-ghostty/.zig-cache/
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
 
 # macOS
 .DS_Store
@@ -22,3 +22,9 @@ ghostty/.zig-cache/
 # IDE
 .vscode/
 .idea/
+
+# Legacy (removed)
+electrobun/
+ghast.xcodeproj/
+ghast.entitlements
+ghostty/

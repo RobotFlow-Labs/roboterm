@@ -7,7 +7,7 @@
 # ROBOTERM — ROS2 Developer Tools
 # ============================================================
 
-export ROBOTERM_VERSION="0.1.0"
+export ROBOTERM_VERSION="0.3.5"
 
 # Colors
 _RT_ORANGE='\033[38;2;255;59;0m'
@@ -516,29 +516,85 @@ rt-ssh() {
     _rt_header "SSH Robot Access"
     echo ""
 
-    if [ -z "$1" ]; then
-        # List configured hosts
-        if [ -f ~/.config/roboterm/hosts.json ]; then
+    local ssh_file="$HOME/.config/roboterm/ssh-connections.json"
+    local hosts_file="$HOME/.config/roboterm/hosts.json"
+
+    if [ -z "${1:-}" ]; then
+        # List configured SSH connections (preferred) or legacy hosts
+        if [ -f "$ssh_file" ]; then
             python3 -c "
 import json
-with open('$HOME/.config/roboterm/hosts.json') as f:
+with open('$ssh_file') as f:
+    conns = json.load(f)
+for i, c in enumerate(conns):
+    user = c.get('user','')
+    host = c.get('host','')
+    port = c.get('port', 22)
+    key = c.get('keyPath','')
+    userhost = f'{user}@{host}' if user else host
+    extra = f'  -i {key}' if key else ''
+    extra += f'  -p {port}' if port != 22 else ''
+    print(f'  [{i+1}] {c[\"label\"]:20s} {userhost:25s}{extra}')
+" 2>/dev/null
+        elif [ -f "$hosts_file" ]; then
+            python3 -c "
+import json
+with open('$hosts_file') as f:
     hosts = json.load(f)
 for i, h in enumerate(hosts):
     print(f'  [{i+1}] {h[\"name\"]:20s} {h[\"host\"]:20s} ({h[\"type\"]})')
 " 2>/dev/null
-            echo ""
-            echo -e "${_RT_DIM}  Usage: rt ssh <name_or_number>${_RT_RESET}"
         else
-            _rt_warn "No hosts configured. Create ~/.config/roboterm/hosts.json"
+            _rt_warn "No SSH connections configured."
+            _rt_info "Add connections in ROBOTERM Preferences → SSH tab"
+            return 0
         fi
+        echo ""
+        echo -e "${_RT_DIM}  Usage: rt ssh <name_or_number>${_RT_RESET}"
         return 0
     fi
 
     # Connect by name or number
     local target="$1"
-    local host=$(python3 -c "
-import json, sys
-with open('$HOME/.config/roboterm/hosts.json') as f:
+    local ssh_cmd=""
+
+    # Try ssh-connections.json first
+    if [ -f "$ssh_file" ]; then
+        ssh_cmd=$(python3 -c "
+import json, sys, os
+with open('$ssh_file') as f:
+    conns = json.load(f)
+t = '$target'
+conn = None
+if t.isdigit():
+    idx = int(t) - 1
+    if 0 <= idx < len(conns):
+        conn = conns[idx]
+else:
+    for c in conns:
+        if c['label'].lower() == t.lower():
+            conn = c
+            break
+if conn and conn.get('host'):
+    parts = ['ssh']
+    port = conn.get('port', 22)
+    if port != 22:
+        parts += ['-p', str(port)]
+    key = conn.get('keyPath', '')
+    if key:
+        parts += ['-i', os.path.expanduser(key)]
+    user = conn.get('user', '')
+    host = conn['host']
+    parts.append(f'{user}@{host}' if user else host)
+    print(' '.join(parts))
+" 2>/dev/null)
+    fi
+
+    # Fallback to hosts.json
+    if [ -z "$ssh_cmd" ] && [ -f "$hosts_file" ]; then
+        local host=$(python3 -c "
+import json
+with open('$hosts_file') as f:
     hosts = json.load(f)
 t = '$target'
 if t.isdigit():
@@ -551,10 +607,14 @@ else:
             print(h['host'])
             break
 " 2>/dev/null)
+        if [ -n "$host" ]; then
+            ssh_cmd="ssh $host"
+        fi
+    fi
 
-    if [ -n "$host" ]; then
-        _rt_info "Connecting to: $host"
-        ssh "$host"
+    if [ -n "$ssh_cmd" ]; then
+        _rt_info "Connecting: $ssh_cmd"
+        eval "$ssh_cmd"
     else
         _rt_err "Host '$target' not found"
     fi
@@ -689,7 +749,7 @@ rt-info() {
     echo ""
     _rt_info "Config: ~/.config/roboterm/"
     _rt_info "Hosts: ~/.config/roboterm/hosts.json"
-    _rt_info "Theme: ~/.config/ghostty/config"
+    _rt_info "SSH:   ~/.config/roboterm/ssh-connections.json"
 }
 
 # ============================================================
@@ -1122,6 +1182,6 @@ rt() {
 }
 
 # Auto-complete
-complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info profile export alias disk log dupes help" rt
+complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info profile export alias disk log dupes connect disconnect help" rt
 
 echo -e "${_RT_DIM}ROBOTERM tools loaded. Type ${_RT_ORANGE}rt${_RT_RESET}${_RT_DIM} for help.${_RT_RESET}"

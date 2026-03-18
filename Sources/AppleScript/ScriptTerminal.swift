@@ -28,7 +28,17 @@ final class ScriptTerminal: NSObject {
 
     @objc(workingDirectory)
     var workingDirectory: String {
-        tab?.currentDirectory ?? tab?.initialWorkingDirectory ?? ""
+        // SSH tabs don't have a local working directory — return the connection info
+        if let ssh = tab?.sshConfig {
+            let userHost = ssh.user.isEmpty ? ssh.host : "\(ssh.user)@\(ssh.host)"
+            return "ssh://\(userHost):\(ssh.port)"
+        }
+        return tab?.currentDirectory ?? tab?.initialWorkingDirectory ?? ""
+    }
+
+    @objc(isSSH)
+    var isSSH: Bool {
+        tab?.isSSH ?? false
     }
 
     /// Send text to the terminal (used by AppleScript `input text`).
@@ -92,8 +102,10 @@ final class ScriptTerminal: NSObject {
         }
 
         guard let appDelegate = AppDelegate.shared else { return nil }
-        for mgr in appDelegate.tabManagers {
+        // Only close in the TabManager that owns this tab
+        for mgr in appDelegate.tabManagers where mgr.tabs.contains(where: { $0.id == tab.id }) {
             mgr.closeTab(tab.id)
+            break
         }
         return nil
     }

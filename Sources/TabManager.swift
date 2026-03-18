@@ -9,7 +9,9 @@ final class TabManager: ObservableObject {
 
     @Published var workspaces: [Workspace] = []
     @Published var selectedWorkspaceId: UUID?
-    @Published var isSidebarVisible: Bool = true
+    @Published var isSidebarVisible: Bool = UserDefaults.standard.object(forKey: "sidebarVisible") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(isSidebarVisible, forKey: "sidebarVisible") }
+    }
 
     /// Bumped to force SwiftUI re-render when nested workspace state changes.
     @Published private var changeToken: UInt = 0
@@ -27,34 +29,117 @@ final class TabManager: ObservableObject {
     /// All tabs across all workspaces (for surface lookups).
     var tabs: [Tab] { workspaces.flatMap { $0.tabs } }
 
-    private var focusObserver: Any?
+    private var observers: [Any] = []
+
+    deinit {
+        observers.forEach { NotificationCenter.default.removeObserver($0) }
+    }
 
     /// When `restoring` is true, skip creating a default workspace+tab (the caller will populate).
     init(restoring: Bool = false) {
         if !restoring {
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let workspace = addWorkspace(directory: homeDir)
+            let dir = TerminalSettings.shared.defaultWorkingDirectory
+            let workspace = addWorkspace(directory: dir)
             workspace.createTab()
         }
 
-        focusObserver = NotificationCenter.default.addObserver(
+        observers.append(NotificationCenter.default.addObserver(
             forName: .terminalViewDidFocus, object: nil, queue: .main
         ) { [weak self] notification in
             MainActor.assumeIsolated {
                 guard let self, let view = notification.object as? RobotermTerminal else { return }
                 let tabId = view.tabId
                 // Find the workspace containing this tab and update selection
+                for ws in self.workspaces where ws.tabs.contains(where: { $0.id == tabId }) {
+                    if let layout = ws.splitLayout, layout.allTabIds.contains(tabId) {
+                        ws.selectedTabId = tabId
+                    }
+                    break
+                }
+            }
+        })
+
+        // Observe terminal title changes (OSC 0/2 sequences from the shell)
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .terminalTitleChanged, object: nil, queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let info = notification.userInfo,
+                      let tabId = info["tabId"] as? UUID,
+                      let title = info["title"] as? String else { return }
+                // Only update tabs that belong to this TabManager
                 for ws in self.workspaces {
-                    if ws.tabs.contains(where: { $0.id == tabId }) {
-                        if let layout = ws.splitLayout, layout.allTabIds.contains(tabId) {
-                            // In split mode: just update selected tab, keep layout
-                            ws.selectedTabId = tabId
+                    if let tab = ws.tabs.first(where: { $0.id == tabId }) {
+                        // Preserve [SSH] prefix for SSH tabs
+                        if tab.isSSH {
+                            tab.title = "[SSH] \(title)"
+                        } else {
+                            tab.title = title
                         }
                         break
                     }
                 }
             }
-        }
+        })
+
+        // Observe working directory changes (OSC 7 from the shell)
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .terminalDirectoryChanged, object: nil, queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let info = notification.userInfo,
+                      let tabId = info["tabId"] as? UUID,
+                      let directory = info["directory"] as? String else { return }
+                // Update the tab's current directory
+                for ws in self.workspaces {
+                    if let tab = ws.tabs.first(where: { $0.id == tabId }) {
+                        tab.currentDirectory = directory
+                        if !tab.hasReceivedInitialDirectory {
+                            tab.hasReceivedInitialDirectory = true
+                        }
+                        // Skip workspace regrouping for SSH tabs (remote dirs are irrelevant)
+                        if !tab.isSSH {
+                            self.handleDirectoryChange(tabId: tabId, directory: directory)
+                        }
+                        break
+                    }
+                }
+            }
+        })
+
+        // Observe process exit — auto-close local tabs, keep SSH tabs open
+        observers.append(NotificationCenter.default.addObserver(
+            forName: .terminalProcessExited, object: nil, queue: .main
+        ) { [weak self] notification in
+            MainActor.assumeIsolated {
+                guard let self,
+                      let info = notification.userInfo,
+                      let tabId = info["tabId"] as? UUID else { return }
+                // Only handle tabs belonging to this TabManager
+                let ownedTab = self.workspaces.contains { ws in
+                    ws.tabs.contains { $0.id == tabId }
+                }
+                guard ownedTab else { return }
+
+                // SSH tabs: don't auto-close — let user see error/disconnect message
+                let isSSH = info["isSSH"] as? Bool ?? false
+                if isSSH {
+                    // Update title to show disconnected state
+                    for ws in self.workspaces {
+                        if let tab = ws.tabs.first(where: { $0.id == tabId }) {
+                            let label = tab.sshConfig?.label ?? "SSH"
+                            tab.title = "[SSH] \(label) — disconnected"
+                            break
+                        }
+                    }
+                    return
+                }
+
+                self.closeTab(tabId)
+            }
+        })
     }
 
     // MARK: - Workspace management
@@ -104,8 +189,8 @@ final class TabManager: ObservableObject {
 
         if workspaces.isEmpty {
             // Don't close — create a fresh workspace instead
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let ws = addWorkspace(directory: homeDir)
+            let dir = TerminalSettings.shared.defaultWorkingDirectory
+            let ws = addWorkspace(directory: dir)
             ws.createTab()
         }
     }
@@ -163,11 +248,27 @@ final class TabManager: ObservableObject {
     @discardableResult
     func createTab() -> Tab {
         guard let ws = selectedWorkspace else {
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let ws = addWorkspace(directory: homeDir)
+            let dir = TerminalSettings.shared.defaultWorkingDirectory
+            let ws = addWorkspace(directory: dir)
             return ws.createTab()
         }
         return ws.createTab()
+    }
+
+    /// Create a tab with an SSH direct-process connection.
+    @discardableResult
+    func createSSHTab(config: SSHConnectionConfig) -> Tab {
+        let ws: Workspace
+        if let existing = selectedWorkspace {
+            ws = existing
+        } else {
+            let dir = TerminalSettings.shared.defaultWorkingDirectory
+            ws = addWorkspace(directory: dir)
+        }
+        let tab = Tab(sshConfig: config)
+        ws.tabs.append(tab)
+        ws.selectedTabId = tab.id
+        return tab
     }
 
     func closeTab(_ id: UUID) {
@@ -185,8 +286,8 @@ final class TabManager: ObservableObject {
 
         if workspaces.isEmpty {
             // Don't close — create a fresh workspace instead
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let ws = addWorkspace(directory: homeDir)
+            let dir = TerminalSettings.shared.defaultWorkingDirectory
+            let ws = addWorkspace(directory: dir)
             ws.createTab()
         }
     }

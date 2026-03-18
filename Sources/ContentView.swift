@@ -1,23 +1,19 @@
 import AppKit
 import SwiftUI
 
-// MARK: - RobotFlow Labs Design Tokens
-
-private let rfVoidBlack   = Color(red: 0x05/255, green: 0x05/255, blue: 0x05/255)   // #050505
-private let rfDarkGray    = Color(red: 0x1A/255, green: 0x1A/255, blue: 0x1A/255)   // #1A1A1A
-private let rfElevated    = Color(red: 0x22/255, green: 0x22/255, blue: 0x22/255)   // #222222
-private let rfAccent      = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255)   // #FF3B00
-private let rfPurple      = Color(red: 0x8B/255, green: 0x5C/255, blue: 0xFF/255)   // #8B5CFF
-private let rfGreen       = Color(red: 0x00/255, green: 0xFF/255, blue: 0x88/255)   // #00FF88
-private let rfBorder      = Color(red: 0x33/255, green: 0x33/255, blue: 0x33/255)   // #333333
-
 /// Main window content: sidebar + tab bar + terminal.
 struct ContentView: View {
     @ObservedObject var tabManager: TabManager
-    @State private var sidebarWidth: CGFloat = 180
-    @State private var dragStartWidth: CGFloat = 180
+    @State private var sidebarWidth: CGFloat = {
+        let saved = UserDefaults.standard.double(forKey: "sidebarWidth")
+        return saved > 0 ? CGFloat(saved) : 180
+    }()
+    @State private var dragStartWidth: CGFloat = {
+        let saved = UserDefaults.standard.double(forKey: "sidebarWidth")
+        return saved > 0 ? CGFloat(saved) : 180
+    }()
 
-    private var bgColor: Color { rfVoidBlack }
+    private var bgColor: Color { RF.voidBlack }
 
     var body: some View {
         HStack(spacing: 0) {
@@ -26,7 +22,7 @@ struct ContentView: View {
                     .frame(width: sidebarWidth)
 
                 Rectangle()
-                    .fill(rfBorder)
+                    .fill(RF.border)
                     .frame(width: 1)
                     .padding(.horizontal, 2)
                     .contentShape(Rectangle())
@@ -40,6 +36,7 @@ struct ContentView: View {
                             }
                             .onEnded { _ in
                                 dragStartWidth = sidebarWidth
+                                UserDefaults.standard.set(Double(sidebarWidth), forKey: "sidebarWidth")
                             }
                     )
             }
@@ -60,6 +57,9 @@ struct ContentView: View {
             }
         }
         .background(bgColor)
+        .onChange(of: tabManager.isSidebarVisible) { visible in
+            SidebarVisibility.shared.isVisible = visible
+        }
     }
 }
 
@@ -68,7 +68,7 @@ struct ContentView: View {
 struct WorkspaceSidebar: View {
     @ObservedObject var tabManager: TabManager
 
-    private let sidebarBg = Color(red: 0x08/255, green: 0x08/255, blue: 0x08/255) // near-black
+    private let sidebarBg = RF.sidebarBg
 
     var body: some View {
         VStack(spacing: 0) {
@@ -76,7 +76,7 @@ struct WorkspaceSidebar: View {
             HStack {
                 Text("WORKSPACES")
                     .font(.system(size: 12, weight: .black, design: .monospaced))
-                    .foregroundColor(rfAccent)
+                    .foregroundColor(RF.accent)
                     .tracking(2)
                 Spacer()
             }
@@ -90,7 +90,7 @@ struct WorkspaceSidebar: View {
                 .padding(.bottom, 4)
 
             // Divider
-            Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
+            Rectangle().fill(RF.accent.opacity(0.15)).frame(height: 1)
                 .padding(.horizontal, 8)
 
             // Workspaces list — flexible, shrinks when bottom panels expand
@@ -110,6 +110,12 @@ struct WorkspaceSidebar: View {
             }
             .frame(minHeight: 60)
 
+            // ANIMA modules section
+            AnimaPanelView(tabManager: tabManager)
+
+            // SSH connections section
+            SSHPanelView(tabManager: tabManager)
+
             // Docker containers section — expands with scroll
             DockerPanelView(tabManager: tabManager)
 
@@ -126,8 +132,8 @@ struct WorkspaceAddButton: View {
 
     var body: some View {
         Button(action: {
-            let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
-            let ws = tabManager.createWorkspace(directory: homeDir)
+            let dir = TerminalSettings.shared.defaultWorkingDirectory
+            let ws = tabManager.createWorkspace(directory: dir)
             ws.createTab()
         }) {
             HStack(spacing: 4) {
@@ -137,13 +143,13 @@ struct WorkspaceAddButton: View {
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .tracking(0.5)
             }
-            .foregroundColor(isHovering ? rfAccent : .white.opacity(0.25))
+            .foregroundColor(isHovering ? RF.accent : .white.opacity(0.25))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 8)
             .padding(.vertical, 6)
             .background(
                 Rectangle()
-                    .stroke(isHovering ? rfAccent.opacity(0.3) : Color.white.opacity(0.06), lineWidth: 1)
+                    .stroke(isHovering ? RF.accent.opacity(0.3) : Color.white.opacity(0.06), lineWidth: 1)
             )
             .contentShape(Rectangle())
         }
@@ -162,11 +168,6 @@ struct WorkspaceItemView: View {
     @State private var editText = ""
     @FocusState private var isTextFieldFocused: Bool
 
-    /// The selected tab's title, used for the subtitle line.
-    private var activeTabTitle: String {
-        workspace.selectedTab?.title ?? ""
-    }
-
     /// Short directory path for display (e.g. "~/Projects/roboterm").
     private var directoryLabel: String {
         let dir = workspace.selectedTab?.currentDirectory ?? workspace.directory
@@ -182,7 +183,7 @@ struct WorkspaceItemView: View {
         HStack(spacing: 0) {
             // Accent indicator bar for selected workspace
             Rectangle()
-                .fill(isSelected ? rfAccent : Color.clear)
+                .fill(isSelected ? RF.accent : Color.clear)
                 .frame(width: 3)
 
             VStack(alignment: .leading, spacing: 3) {
@@ -207,15 +208,15 @@ struct WorkspaceItemView: View {
                         Text(workspace.displayName.uppercased())
                             .font(.system(size: 12, weight: .bold, design: .monospaced))
                             .lineLimit(1)
-                            .foregroundColor(isSelected ? rfAccent : .white.opacity(0.5))
+                            .foregroundColor(isSelected ? RF.accent : .white.opacity(0.5))
 
                         if let badge = workspace.badge {
                             Text(badge)
                                 .font(.system(size: 7, weight: .bold, design: .monospaced))
-                                .foregroundColor(rfGreen)
+                                .foregroundColor(RF.green)
                                 .padding(.horizontal, 4)
                                 .padding(.vertical, 1)
-                                .background(Rectangle().stroke(rfGreen.opacity(0.4), lineWidth: 1))
+                                .background(Rectangle().stroke(RF.green.opacity(0.4), lineWidth: 1))
                         }
                     }
                 }
@@ -242,7 +243,7 @@ struct WorkspaceItemView: View {
             } else {
                 Text("\(workspace.tabs.count)")
                     .font(.system(size: 10, weight: .bold, design: .monospaced))
-                    .foregroundColor(isSelected ? rfAccent.opacity(0.6) : .white.opacity(0.15))
+                    .foregroundColor(isSelected ? RF.accent.opacity(0.6) : .white.opacity(0.15))
             }
         }
         .padding(.trailing, 10)
@@ -251,7 +252,7 @@ struct WorkspaceItemView: View {
         .contentShape(Rectangle())
         .background(
             Rectangle()
-                .fill(isSelected ? rfAccent.opacity(0.12) : isHovering ? Color.white.opacity(0.04) : Color.clear)
+                .fill(isSelected ? RF.accent.opacity(0.12) : isHovering ? Color.white.opacity(0.04) : Color.clear)
         )
         .overlay(alignment: .bottom) {
             Rectangle().fill(Color.white.opacity(0.04)).frame(height: 1)
@@ -407,11 +408,15 @@ struct TabItemView: View {
     let isSelected: Bool
     let isOnly: Bool
     let onClose: () -> Void
-    var onDuplicate: (() -> Void)? = nil
+    var onDuplicate: (() -> Void)?
     @State private var isHovering = false
     @State private var isRenaming = false
     @State private var renameText = ""
     @FocusState private var isRenameFocused: Bool
+
+    private var indicatorColor: Color {
+        tab.isSSH ? RF.cyan : RF.accent
+    }
 
     var body: some View {
         HStack(spacing: 6) {
@@ -424,6 +429,13 @@ struct TabItemView: View {
                         .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+            }
+
+            // SSH icon
+            if tab.isSSH {
+                Image(systemName: "network")
+                    .font(.system(size: 10))
+                    .foregroundColor(RF.cyan)
             }
 
             if isRenaming {
@@ -464,7 +476,7 @@ struct TabItemView: View {
         .overlay(alignment: .bottom) {
             if isSelected {
                 RoundedRectangle(cornerRadius: 1)
-                    .fill(rfAccent)
+                    .fill(indicatorColor)
                     .frame(height: 2)
                     .padding(.horizontal, 8)
             }
@@ -475,12 +487,20 @@ struct TabItemView: View {
             if !focused && isRenaming { isRenaming = false }
         }
         .contextMenu {
+            if let sshConfig = tab.sshConfig {
+                Button("Reconnect") {
+                    // Close this tab and open a fresh SSH connection
+                    onClose()
+                    AppDelegate.shared?.focusedTabManager?.createSSHTab(config: sshConfig)
+                }
+                Divider()
+            }
             Button("Rename") {
                 renameText = tab.title.isEmpty ? "Terminal" : tab.title
                 isRenaming = true
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isRenameFocused = true }
             }
-            if let onDuplicate {
+            if let onDuplicate, !tab.isSSH {
                 Button("Duplicate") { onDuplicate() }
             }
             Divider()
@@ -490,139 +510,6 @@ struct TabItemView: View {
 }
 
 // MARK: - Tab drag & drop
-
-// MARK: - Split drop target
-
-struct SplitDropTargetView<Content: View>: View {
-    @ObservedObject var tabManager: TabManager
-    let content: () -> Content
-    @State private var dropEdge: Edge?
-
-    init(tabManager: TabManager, @ViewBuilder content: @escaping () -> Content) {
-        self.tabManager = tabManager
-        self.content = content
-    }
-
-    var body: some View {
-        content()
-            .overlay(
-                GeometryReader { geo in
-                    // Drop zone overlay — only visible when dragging
-                    if let edge = dropEdge {
-                        dropHighlight(edge: edge, size: geo.size)
-                    }
-
-                    // Invisible drop target
-                    Color.clear
-                        .contentShape(Rectangle())
-                        .onDrop(of: [.text], delegate: SplitDropDelegate(
-                            tabManager: tabManager,
-                            size: geo.size,
-                            dropEdge: $dropEdge
-                        ))
-                }
-            )
-    }
-
-    @ViewBuilder
-    private func dropHighlight(edge: Edge, size: CGSize) -> some View {
-        let halfW = size.width / 2
-        let halfH = size.height / 2
-        switch edge {
-        case .leading:
-            Rectangle().fill(rfAccent.opacity(0.15))
-                .frame(width: halfW, height: size.height)
-                .position(x: halfW / 2, y: size.height / 2)
-        case .trailing:
-            Rectangle().fill(rfAccent.opacity(0.15))
-                .frame(width: halfW, height: size.height)
-                .position(x: size.width - halfW / 2, y: size.height / 2)
-        case .top:
-            Rectangle().fill(rfAccent.opacity(0.15))
-                .frame(width: size.width, height: halfH)
-                .position(x: size.width / 2, y: halfH / 2)
-        case .bottom:
-            Rectangle().fill(rfAccent.opacity(0.15))
-                .frame(width: size.width, height: halfH)
-                .position(x: size.width / 2, y: size.height - halfH / 2)
-        }
-    }
-}
-
-struct SplitDropDelegate: DropDelegate {
-    let tabManager: TabManager
-    let size: CGSize
-    @Binding var dropEdge: Edge?
-
-    private func edgeForLocation(_ location: CGPoint) -> Edge {
-        let relX = location.x / size.width
-        let relY = location.y / size.height
-        // Check which edge is closest
-        let distances: [(Edge, CGFloat)] = [
-            (.leading, relX),
-            (.trailing, 1 - relX),
-            (.top, relY),
-            (.bottom, 1 - relY),
-        ]
-        return distances.min(by: { $0.1 < $1.1 })!.0
-    }
-
-    func dropUpdated(info: DropInfo) -> DropProposal? {
-        dropEdge = edgeForLocation(info.location)
-        return DropProposal(operation: .move)
-    }
-
-    func dropExited(info: DropInfo) {
-        dropEdge = nil
-    }
-
-    func performDrop(info: DropInfo) -> Bool {
-        dropEdge = nil
-        guard let ws = tabManager.selectedWorkspace,
-              let currentTab = ws.selectedTab else { return false }
-
-        // Get the dropped tab ID from the drag data
-        guard let item = info.itemProviders(for: [.text]).first else { return false }
-        item.loadObject(ofClass: NSString.self) { string, _ in
-            guard let uuidString = string as? String,
-                  let droppedTabId = UUID(uuidString: uuidString) else { return }
-
-            DispatchQueue.main.async {
-                // Don't split with self
-                guard droppedTabId != currentTab.id else { return }
-                // Must be a tab in this workspace
-                guard ws.tabs.contains(where: { $0.id == droppedTabId }) else { return }
-
-                let edge = self.edgeForLocation(info.location)
-                let direction: SplitNode.SplitDirection = (edge == .leading || edge == .trailing) ? .horizontal : .vertical
-
-                // Create split layout
-                if let layout = ws.splitLayout {
-                    // Already split — add to the tree next to the current tab
-                    if !layout.allTabIds.contains(droppedTabId) {
-                        layout.splitTab(currentTab.id, with: droppedTabId, direction: direction)
-                    }
-                } else {
-                    let root = SplitNode(tabId: currentTab.id)
-                    if edge == .leading || edge == .top {
-                        // Dropped tab goes first
-                        root.splitTab(currentTab.id, with: droppedTabId, direction: direction)
-                        // Swap: we need dropped tab on the left/top
-                        // Actually splitTab puts droppedTabId as second, so for leading/top we swap
-                        if case .split(let dir, let first, let second, let ratio) = root.content {
-                            root.content = .split(direction: dir, first: second, second: first, ratio: 1 - ratio)
-                        }
-                    } else {
-                        root.splitTab(currentTab.id, with: droppedTabId, direction: direction)
-                    }
-                    ws.splitLayout = root
-                }
-                ws.selectedTabId = droppedTabId
-            }
-        }
-        return true
-    }
-}
 
 struct TabDropDelegate: DropDelegate {
     let targetId: UUID
@@ -666,14 +553,19 @@ struct TerminalContainerView: NSViewRepresentable {
 
         let tabLookup: (UUID) -> Tab? = { id in ws.tabs.first { $0.id == id } }
 
-        // Clean up stale tab IDs from split layout
+        // Clean up stale tab IDs from split layout (deferred to avoid SwiftUI re-entrancy)
         if let layout = ws.splitLayout {
             let tabIds = Set(ws.tabs.map { $0.id })
-            for splitTabId in layout.allTabIds where !tabIds.contains(splitTabId) {
-                layout.removeTab(splitTabId)
-            }
-            if layout.allTabIds.count <= 1 {
-                ws.splitLayout = nil
+            let stale = layout.allTabIds.filter { !tabIds.contains($0) }
+            if !stale.isEmpty || layout.allTabIds.count <= 1 {
+                DispatchQueue.main.async {
+                    for splitTabId in stale {
+                        _ = layout.removeTab(splitTabId)
+                    }
+                    if layout.allTabIds.count <= 1 {
+                        ws.splitLayout = nil
+                    }
+                }
             }
         }
 

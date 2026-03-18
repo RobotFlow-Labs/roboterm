@@ -91,7 +91,7 @@ final class USBHotplugMonitor {
         CFRunLoopRun()
 
         // Cleanup if run loop exits.
-        if matchedIterator != 0    { IOObjectRelease(matchedIterator) }
+        if matchedIterator != 0 { IOObjectRelease(matchedIterator) }
         if terminatedIterator != 0 { IOObjectRelease(terminatedIterator) }
         IONotificationPortDestroy(port)
         if let ptr = selfPtr {
@@ -127,15 +127,7 @@ final class USBHotplugMonitor {
     }
 }
 
-// MARK: - Design tokens
-
-private let panelBg    = Color(red: 0x06/255, green: 0x06/255, blue: 0x06/255)
-private let rfAccent   = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255)
-private let rfGreen    = Color(red: 0x00/255, green: 0xFF/255, blue: 0x88/255)
-private let rfCyan     = Color(red: 0x00/255, green: 0xDD/255, blue: 0xFF/255)
-private let rfYellow   = Color(red: 0xFF/255, green: 0xB8/255, blue: 0x00/255)
-private let rfRed      = Color(red: 0xFF/255, green: 0x33/255, blue: 0x33/255)
-private let rfDim      = Color.white.opacity(0.3)
+// Design tokens: use RF namespace from DesignTokens.swift
 
 // MARK: - Device model
 
@@ -183,6 +175,10 @@ final class HardwareState: ObservableObject {
     private let scanQueue = DispatchQueue(label: "roboterm.hardware.scan")
     private var timer: Timer?
 
+    deinit {
+        timer?.invalidate()
+    }
+
     private init() {
         // Run initial scan — populate with what we can detect
         let initial = HardwarePanel.detectDevices()
@@ -197,10 +193,11 @@ final class HardwareState: ObservableObject {
 
         // Always include configured network hosts (show as disconnected until verified)
         let hosts = HardwarePanel.loadNetworkHosts()
-        for host in hosts {
-            if !devices.contains(where: { $0.name == host.name }) {
-                devices.append(HardwareDevice(name: host.name, type: .compute, status: .disconnected, detail: "\(host.type) (\(host.host))"))
-            }
+        for host in hosts where !devices.contains(where: { $0.name == host.name }) {
+            devices.append(HardwareDevice(
+                name: host.name, type: .compute,
+                status: .disconnected, detail: "\(host.type) (\(host.host))"
+            ))
         }
 
         self.devices = devices
@@ -237,7 +234,10 @@ final class HardwareState: ObservableObject {
 
         // Then schedule periodic background scans for network host reachability
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.scan() }
+            MainActor.assumeIsolated {
+                guard SidebarVisibility.shared.isVisible else { return }
+                self?.scan()
+            }
         }
     }
 
@@ -295,74 +295,9 @@ final class HardwareState: ObservableObject {
     }
 }
 
-// MARK: - Hardware Panel View
+// MARK: - Hardware detection utilities (namespace)
 
-struct HardwarePanel: View {
-    @ObservedObject private var state = HardwareState.shared
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            Rectangle().fill(rfAccent.opacity(0.2)).frame(height: 1)
-                .padding(.horizontal, 8)
-
-            HStack {
-                Text("HARDWARE")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(rfAccent.opacity(0.7))
-                    .tracking(1.5)
-                Spacer()
-                Button(action: { state.scan() }) {
-                    Image(systemName: state.isScanning ? "arrow.triangle.2.circlepath" : "arrow.clockwise")
-                        .font(.system(size: 8))
-                        .foregroundColor(rfDim)
-                        .rotationEffect(.degrees(state.isScanning ? 360 : 0))
-                        .animation(state.isScanning ? .linear(duration: 1).repeatForever(autoreverses: false) : .default, value: state.isScanning)
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 12)
-            .padding(.top, 8)
-            .padding(.bottom, 4)
-
-            // Device list
-            if state.devices.isEmpty && !state.isScanning {
-                HStack(spacing: 4) {
-                    Text("SCANNING...")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
-                        .foregroundColor(rfDim)
-                        .tracking(1)
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 4)
-            } else {
-                ForEach(state.devices) { device in
-                    DeviceRow(device: device)
-                }
-            }
-
-            // Bottom status
-            Rectangle().fill(rfAccent.opacity(0.1)).frame(height: 1)
-                .padding(.horizontal, 8)
-                .padding(.top, 4)
-
-            let connectedCount = state.devices.filter { $0.status == .connected }.count
-            HStack(spacing: 4) {
-                Circle().fill(connectedCount > 0 ? rfGreen : rfDim).frame(width: 5, height: 5)
-                Text(connectedCount > 0 ? "SYSTEM: ONLINE" : "SYSTEM: IDLE")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .foregroundColor(connectedCount > 0 ? rfGreen.opacity(0.6) : rfDim)
-                    .tracking(0.5)
-                Spacer()
-                Text("\(connectedCount)/\(state.devices.count)")
-                    .font(.system(size: 8, weight: .bold, design: .monospaced))
-                    .foregroundColor(rfAccent.opacity(0.5))
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-        }
-        .background(panelBg)
-    }
+enum HardwarePanel {
 
     // MARK: - Auto-detect all hardware
 
@@ -598,88 +533,11 @@ struct HardwarePanel: View {
     }
 }
 
-// MARK: - Device Row
-
-struct DeviceRow: View {
-    let device: HardwareDevice
-    @State private var isHovering = false
-
-    private var statusColor: Color {
-        switch device.status {
-        case .connected: return rfGreen
-        case .disconnected: return rfDim
-        }
-    }
-
-    private var typeIcon: String {
-        switch device.type {
-        case .camera: return "\u{25A3}"
-        case .lidar: return "\u{25CE}"
-        case .imu: return "\u{2316}"
-        case .compute: return "\u{2395}"
-        case .gamepad: return "\u{2318}"
-        case .serial: return "\u{2192}"
-        }
-    }
-
-    private var typeColor: Color {
-        switch device.type {
-        case .camera: return rfCyan
-        case .lidar: return rfAccent
-        case .imu: return rfYellow
-        case .compute: return rfGreen
-        case .gamepad: return Color.white.opacity(0.5)
-        case .serial: return Color.white.opacity(0.4)
-        }
-    }
-
-    private var deviceTypeLabel: String {
-        switch device.type {
-        case .camera: return "CAM"
-        case .lidar: return "LDR"
-        case .imu: return "IMU"
-        case .compute: return "SBC"
-        case .gamepad: return "JOY"
-        case .serial: return "USB"
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: 6) {
-            Circle()
-                .fill(statusColor)
-                .frame(width: 5, height: 5)
-
-            Text(typeIcon)
-                .font(.system(size: 9))
-                .foregroundColor(device.status == .connected ? typeColor : rfDim)
-
-            Text(device.name.uppercased())
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(device.status == .connected ? (isHovering ? typeColor : .white.opacity(0.6)) : rfDim)
-                .lineLimit(1)
-
-            Spacer()
-
-            Text(deviceTypeLabel)
-                .font(.system(size: 7, weight: .medium, design: .monospaced))
-                .foregroundColor(device.status == .connected ? typeColor.opacity(0.5) : rfDim.opacity(0.5))
-                .tracking(0.5)
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 4)
-        .background(isHovering ? typeColor.opacity(0.05) : Color.clear)
-        .contentShape(Rectangle())
-        .onHover { isHovering = $0 }
-        .help(device.detail)
-    }
-}
-
 // MARK: - Hardware Panel View (collapsible, same style as Docker panel)
 
 struct HardwarePanelView: View {
     @ObservedObject private var state = HardwareState.shared
-    @State private var isExpanded = true
+    @State private var isExpanded: Bool = UserDefaults.standard.object(forKey: "panelExpanded.hardware") as? Bool ?? true
 
     private var connectedCount: Int {
         state.devices.filter { $0.status == .connected }.count
@@ -688,31 +546,34 @@ struct HardwarePanelView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Clickable header
-            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
+            Button(action: {
+                withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() }
+                UserDefaults.standard.set(isExpanded, forKey: "panelExpanded.hardware")
+            }) {
                 HStack(spacing: 6) {
                     Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                         .font(.system(size: 8, weight: .bold))
-                        .foregroundStyle(rfAccent.opacity(0.5))
+                        .foregroundStyle(RF.accent.opacity(0.5))
                         .frame(width: 10)
 
                     Text("HARDWARE")
                         .font(.system(size: 10, weight: .bold, design: .monospaced))
-                        .foregroundStyle(rfAccent.opacity(0.8))
+                        .foregroundStyle(RF.accent.opacity(0.8))
                         .tracking(1.5)
 
                     Spacer()
 
                     HStack(spacing: 3) {
-                        Circle().fill(connectedCount > 0 ? rfGreen : rfDim).frame(width: 5, height: 5)
+                        Circle().fill(connectedCount > 0 ? RF.green : RF.dim).frame(width: 5, height: 5)
                         Text("\(connectedCount)/\(state.devices.count)")
                             .font(.system(size: 9, weight: .bold, design: .monospaced))
-                            .foregroundStyle(connectedCount > 0 ? rfGreen.opacity(0.7) : rfDim)
+                            .foregroundStyle(connectedCount > 0 ? RF.green.opacity(0.7) : RF.dim)
                     }
 
                     Button(action: { state.scan() }) {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 9))
-                            .foregroundStyle(rfDim)
+                            .foregroundStyle(RF.dim)
                     }
                     .buttonStyle(.plain)
                 }
@@ -723,7 +584,7 @@ struct HardwarePanelView: View {
             .buttonStyle(.plain)
 
             if isExpanded {
-                Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
+                Rectangle().fill(RF.accent.opacity(0.15)).frame(height: 1)
                     .padding(.horizontal, 8)
 
                 ForEach(state.devices) { device in
@@ -731,15 +592,15 @@ struct HardwarePanelView: View {
                 }
 
                 // System status footer
-                Rectangle().fill(rfAccent.opacity(0.1)).frame(height: 1)
+                Rectangle().fill(RF.accent.opacity(0.1)).frame(height: 1)
                     .padding(.horizontal, 8)
                     .padding(.top, 4)
 
                 HStack(spacing: 4) {
-                    Circle().fill(connectedCount > 0 ? rfGreen : rfDim).frame(width: 5, height: 5)
+                    Circle().fill(connectedCount > 0 ? RF.green : RF.dim).frame(width: 5, height: 5)
                     Text(connectedCount > 0 ? "SYSTEM: ONLINE" : "SYSTEM: IDLE")
                         .font(.system(size: 9, weight: .medium, design: .monospaced))
-                        .foregroundStyle(connectedCount > 0 ? rfGreen.opacity(0.6) : rfDim)
+                        .foregroundStyle(connectedCount > 0 ? RF.green.opacity(0.6) : RF.dim)
                         .tracking(0.5)
                 }
                 .padding(.horizontal, 12)
@@ -756,16 +617,16 @@ private struct HardwareDeviceRow: View {
     @State private var isHovering = false
 
     private var statusColor: Color {
-        device.status == .connected ? rfGreen : rfDim
+        device.status == .connected ? RF.green : RF.dim
     }
 
     private var typeColor: Color {
         switch device.type {
-        case .camera: return rfCyan
-        case .lidar: return rfAccent
-        case .imu: return rfYellow
-        case .compute: return rfGreen
-        case .gamepad, .serial: return rfDim
+        case .camera: return RF.cyan
+        case .lidar: return RF.accent
+        case .imu: return RF.yellow
+        case .compute: return RF.green
+        case .gamepad, .serial: return RF.dim
         }
     }
 
@@ -797,19 +658,19 @@ private struct HardwareDeviceRow: View {
 
             Image(systemName: typeIcon)
                 .font(.system(size: 9))
-                .foregroundStyle(device.status == .connected ? typeColor : rfDim)
+                .foregroundStyle(device.status == .connected ? typeColor : RF.dim)
                 .frame(width: 14)
 
             Text(device.name)
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
-                .foregroundStyle(isHovering ? typeColor : (device.status == .connected ? .white.opacity(0.6) : rfDim))
+                .foregroundStyle(isHovering ? typeColor : (device.status == .connected ? .white.opacity(0.6) : RF.dim))
                 .lineLimit(1)
 
             Spacer()
 
             Text(typeLabel)
                 .font(.system(size: 8, weight: .medium, design: .monospaced))
-                .foregroundStyle(device.status == .connected ? typeColor.opacity(0.5) : rfDim.opacity(0.5))
+                .foregroundStyle(device.status == .connected ? typeColor.opacity(0.5) : RF.dim.opacity(0.5))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 3)

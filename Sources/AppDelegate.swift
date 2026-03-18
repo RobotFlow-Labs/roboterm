@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import SwiftUI
 
 @MainActor
@@ -7,6 +8,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     /// All tab managers (one per window).
     private(set) var tabManagers: [TabManager] = []
+    private var settingsCancellables: Set<AnyCancellable> = []
+    private var preferencesWindow: NSWindow?
 
     /// The tab manager for the currently focused window.
     var focusedTabManager: TabManager? {
@@ -22,11 +25,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Try to restore a previous session
         var restored = false
-        if let session = SessionStore.restore() {
+        if TerminalSettings.shared.restoreSessionOnLaunch,
+           let session = SessionStore.restore() {
             restored = SessionStore.apply(session, to: self)
-            if restored {
-                SessionStore.clear()
-            }
         }
 
         if !restored {
@@ -35,10 +36,33 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         // Build main menu
         NSApp.mainMenu = buildMainMenu()
+
+        // Update window chrome when appearance settings change
+        let updateWindowChrome = { [weak self] in
+            guard let self else { return }
+            let settings = TerminalSettings.shared
+            let bgColor = settings.backgroundColor.withAlphaComponent(settings.backgroundOpacity)
+            let isOpaque = settings.backgroundOpacity >= 1.0
+            for mgr in self.tabManagers {
+                mgr.window?.backgroundColor = bgColor
+                mgr.window?.isOpaque = isOpaque
+            }
+        }
+        let s = TerminalSettings.shared
+        s.$backgroundColor.dropFirst().sink { _ in updateWindowChrome() }.store(in: &settingsCancellables)
+        s.$backgroundOpacity.dropFirst().sink { _ in updateWindowChrome() }.store(in: &settingsCancellables)
+
+        // Rebuild menu when SSH connections change (so the SSH submenu stays current)
+        s.$sshConnections.dropFirst().sink { [weak self] _ in
+            guard let self else { return }
+            NSApp.mainMenu = self.buildMainMenu()
+        }.store(in: &settingsCancellables)
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        SessionStore.save(tabManagers: tabManagers)
+        if TerminalSettings.shared.saveSessionOnQuit {
+            SessionStore.save(tabManagers: tabManagers)
+        }
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool {
@@ -68,7 +92,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.titleVisibility = .hidden
         window.titlebarSeparatorStyle = .none
         window.title = "ROBOTERM"
-        window.backgroundColor = TerminalSettings.shared.backgroundColor
+        window.backgroundColor = TerminalSettings.shared.backgroundColor.withAlphaComponent(TerminalSettings.shared.backgroundOpacity)
         window.isOpaque = TerminalSettings.shared.backgroundOpacity >= 1.0
         window.delegate = self
         window.makeKeyAndOrderFront(nil)
@@ -82,234 +106,51 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         createWindowForTabManager(tabManager)
     }
 
-    // MARK: - Menu
-
-    private func buildMainMenu() -> NSMenu {
-        let mainMenu = NSMenu()
-
-        // App menu
-        let appMenu = NSMenu()
-        appMenu.addItem(withTitle: "About ROBOTERM", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
-        appMenu.addItem(.separator())
-        appMenu.addItem(withTitle: "Quit ROBOTERM", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
-        let appMenuItem = NSMenuItem()
-        appMenuItem.submenu = appMenu
-        mainMenu.addItem(appMenuItem)
-
-        // File menu
-        let fileMenu = NSMenu(title: "File")
-        fileMenu.addItem(withTitle: "New Window", action: #selector(newWindow(_:)), keyEquivalent: "n")
-        fileMenu.addItem(withTitle: "New Tab", action: #selector(newTab(_:)), keyEquivalent: "t")
-        fileMenu.addItem(.separator())
-        fileMenu.addItem(withTitle: "Close Tab", action: #selector(closeTab(_:)), keyEquivalent: "w")
-        let fileMenuItem = NSMenuItem()
-        fileMenuItem.submenu = fileMenu
-        mainMenu.addItem(fileMenuItem)
-
-        // View menu (splits)
-        let viewMenu = NSMenu(title: "View")
-        viewMenu.addItem(withTitle: "Split Right", action: #selector(splitRight(_:)), keyEquivalent: "d")
-        viewMenu.addItem(withTitle: "Split Down", action: #selector(splitDown(_:)), keyEquivalent: "d")
-        viewMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
-        viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Next Pane", action: #selector(nextPane(_:)), keyEquivalent: "]")
-        viewMenu.items.last?.keyEquivalentModifierMask = [.command, .option]
-        viewMenu.addItem(withTitle: "Previous Pane", action: #selector(previousPane(_:)), keyEquivalent: "[")
-        viewMenu.items.last?.keyEquivalentModifierMask = [.command, .option]
-        viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn(_:)), keyEquivalent: "=")
-        viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut(_:)), keyEquivalent: "-")
-        viewMenu.addItem(withTitle: "Reset Zoom", action: #selector(zoomReset(_:)), keyEquivalent: "0")
-        viewMenu.addItem(.separator())
-        viewMenu.addItem(withTitle: "Toggle Fullscreen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
-        viewMenu.items.last?.keyEquivalentModifierMask = [.command, .control]
-        let viewMenuItem = NSMenuItem()
-        viewMenuItem.submenu = viewMenu
-        mainMenu.addItem(viewMenuItem)
-
-        // Window menu
-        let windowMenu = NSMenu(title: "Window")
-        windowMenu.addItem(withTitle: "Next Tab", action: #selector(nextTab(_:)), keyEquivalent: "}")
-        windowMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
-        windowMenu.addItem(withTitle: "Previous Tab", action: #selector(previousTab(_:)), keyEquivalent: "{")
-        windowMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
-        windowMenu.addItem(.separator())
-        for i in 1...9 {
-            windowMenu.addItem(withTitle: "Tab \(i)", action: #selector(selectTabByNumber(_:)), keyEquivalent: "\(i)")
-            windowMenu.items.last?.tag = i
-        }
-        windowMenu.addItem(.separator())
-        windowMenu.addItem(withTitle: "Minimize", action: #selector(NSWindow.miniaturize(_:)), keyEquivalent: "m")
-        let windowMenuItem = NSMenuItem()
-        windowMenuItem.submenu = windowMenu
-        mainMenu.addItem(windowMenuItem)
-
-        // Edit menu (for Copy/Paste to work)
-        let editMenu = NSMenu(title: "Edit")
-        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        let editMenuItem = NSMenuItem()
-        editMenuItem.submenu = editMenu
-        mainMenu.addItem(editMenuItem)
-
-        // Robotics menu
-        let roboticsMenu = NSMenu(title: "Robotics")
-
-        // ROS2 Introspection
-        let ros2IntrospectItem = NSMenuItem(title: "ROS2 Introspect", action: nil, keyEquivalent: "")
-        let ros2IntrospectMenu = NSMenu(title: "ROS2 Introspect")
-        ros2IntrospectMenu.addItem(withTitle: "Node List", action: #selector(ros2NodeList(_:)), keyEquivalent: "")
-        ros2IntrospectMenu.addItem(withTitle: "Topic List (verbose)", action: #selector(ros2TopicList(_:)), keyEquivalent: "")
-        ros2IntrospectMenu.addItem(withTitle: "Service List", action: #selector(ros2ServiceList(_:)), keyEquivalent: "")
-        ros2IntrospectMenu.addItem(withTitle: "Action List", action: #selector(ros2ActionList(_:)), keyEquivalent: "")
-        ros2IntrospectMenu.addItem(withTitle: "Parameter List", action: #selector(ros2ParamList(_:)), keyEquivalent: "")
-        ros2IntrospectMenu.addItem(withTitle: "Interface List", action: #selector(ros2InterfaceList(_:)), keyEquivalent: "")
-        ros2IntrospectMenu.addItem(.separator())
-        ros2IntrospectMenu.addItem(withTitle: "Node Graph (rqt_graph)", action: #selector(ros2Graph(_:)), keyEquivalent: "")
-        ros2IntrospectItem.submenu = ros2IntrospectMenu
-        roboticsMenu.addItem(ros2IntrospectItem)
-
-        // ROS2 Diagnostics
-        let ros2DiagItem = NSMenuItem(title: "ROS2 Diagnostics", action: nil, keyEquivalent: "")
-        let ros2DiagMenu = NSMenu(title: "ROS2 Diagnostics")
-        ros2DiagMenu.addItem(withTitle: "Doctor Report", action: #selector(ros2Doctor(_:)), keyEquivalent: "")
-        ros2DiagMenu.addItem(withTitle: "Daemon Status", action: #selector(ros2DaemonStatus(_:)), keyEquivalent: "")
-        ros2DiagMenu.addItem(withTitle: "Multicast Test", action: #selector(ros2Multicast(_:)), keyEquivalent: "")
-        ros2DiagMenu.addItem(withTitle: "wtf (diagnostic dump)", action: #selector(ros2Wtf(_:)), keyEquivalent: "")
-        ros2DiagMenu.addItem(.separator())
-        ros2DiagMenu.addItem(withTitle: "Topic Hz /scan", action: #selector(ros2HzScan(_:)), keyEquivalent: "")
-        ros2DiagMenu.addItem(withTitle: "Topic Hz /camera/image_raw", action: #selector(ros2HzCamera(_:)), keyEquivalent: "")
-        ros2DiagMenu.addItem(withTitle: "Topic Delay /tf", action: #selector(ros2DelayTf(_:)), keyEquivalent: "")
-        ros2DiagItem.submenu = ros2DiagMenu
-        roboticsMenu.addItem(ros2DiagItem)
-
-        // ROS2 Transforms
-        let ros2TfItem = NSMenuItem(title: "ROS2 Transforms", action: nil, keyEquivalent: "")
-        let ros2TfMenu = NSMenu(title: "ROS2 Transforms")
-        ros2TfMenu.addItem(withTitle: "TF Tree (view_frames)", action: #selector(ros2TfTree(_:)), keyEquivalent: "")
-        ros2TfMenu.addItem(withTitle: "TF Echo base_link → map", action: #selector(ros2TfEcho(_:)), keyEquivalent: "")
-        ros2TfMenu.addItem(withTitle: "TF Monitor", action: #selector(ros2TfMonitor(_:)), keyEquivalent: "")
-        ros2TfItem.submenu = ros2TfMenu
-        roboticsMenu.addItem(ros2TfItem)
-        roboticsMenu.addItem(.separator())
-
-        // Launch & Run
-        let launchItem = NSMenuItem(title: "Launch & Run", action: nil, keyEquivalent: "")
-        let launchMenu = NSMenu(title: "Launch & Run")
-        launchMenu.addItem(withTitle: "ros2 launch...", action: #selector(ros2Launch(_:)), keyEquivalent: "l")
-        launchMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
-        launchMenu.addItem(withTitle: "ros2 run...", action: #selector(ros2Run(_:)), keyEquivalent: "")
-        launchMenu.addItem(.separator())
-        launchMenu.addItem(withTitle: "colcon build", action: #selector(colconBuild(_:)), keyEquivalent: "b")
-        launchMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
-        launchMenu.addItem(withTitle: "colcon build --packages-select...", action: #selector(colconBuildSelect(_:)), keyEquivalent: "")
-        launchMenu.addItem(withTitle: "colcon test", action: #selector(colconTest(_:)), keyEquivalent: "")
-        launchItem.submenu = launchMenu
-        roboticsMenu.addItem(launchItem)
-
-        // Bag Recording
-        let bagItem = NSMenuItem(title: "Bag Recording", action: nil, keyEquivalent: "")
-        let bagMenu = NSMenu(title: "Bag Recording")
-        bagMenu.addItem(withTitle: "Record All Topics", action: #selector(ros2BagRecord(_:)), keyEquivalent: "")
-        bagMenu.addItem(withTitle: "Record Select Topics...", action: #selector(ros2BagRecordSelect(_:)), keyEquivalent: "")
-        bagMenu.addItem(withTitle: "Play Bag...", action: #selector(ros2BagPlay(_:)), keyEquivalent: "")
-        bagMenu.addItem(withTitle: "Bag Info...", action: #selector(ros2BagInfo(_:)), keyEquivalent: "")
-        bagItem.submenu = bagMenu
-        roboticsMenu.addItem(bagItem)
-        roboticsMenu.addItem(.separator())
-
-        // Simulation
-        let simItem = NSMenuItem(title: "Simulation", action: nil, keyEquivalent: "")
-        let simMenu = NSMenu(title: "Simulation")
-        simMenu.addItem(withTitle: "Gazebo Sim", action: #selector(launchGazebo(_:)), keyEquivalent: "")
-        simMenu.addItem(withTitle: "RViz2", action: #selector(launchRViz2(_:)), keyEquivalent: "")
-        simMenu.addItem(withTitle: "rqt", action: #selector(launchRqt(_:)), keyEquivalent: "")
-        simMenu.addItem(withTitle: "MuJoCo", action: #selector(launchMuJoCo(_:)), keyEquivalent: "")
-        simMenu.addItem(withTitle: "Isaac Sim", action: #selector(launchIsaacSim(_:)), keyEquivalent: "")
-        simItem.submenu = simMenu
-        roboticsMenu.addItem(simItem)
-        roboticsMenu.addItem(.separator())
-
-        // Docker
-        let dockerItem = NSMenuItem(title: "Docker", action: nil, keyEquivalent: "")
-        let dockerMenu = NSMenu(title: "Docker")
-        dockerMenu.addItem(withTitle: "docker compose ps", action: #selector(dockerPs(_:)), keyEquivalent: "")
-        dockerMenu.addItem(withTitle: "docker compose up -d", action: #selector(animaComposeUp(_:)), keyEquivalent: "")
-        dockerMenu.addItem(withTitle: "docker compose down", action: #selector(animaComposeDown(_:)), keyEquivalent: "")
-        dockerMenu.addItem(withTitle: "docker compose logs -f", action: #selector(animaLogs(_:)), keyEquivalent: "")
-        dockerMenu.addItem(.separator())
-        dockerMenu.addItem(withTitle: "docker ps", action: #selector(dockerPsAll(_:)), keyEquivalent: "")
-        dockerMenu.addItem(withTitle: "docker images", action: #selector(dockerImages(_:)), keyEquivalent: "")
-        dockerItem.submenu = dockerMenu
-        roboticsMenu.addItem(dockerItem)
-
-        // ANIMA
-        let animaItem = NSMenuItem(title: "ANIMA Suite", action: nil, keyEquivalent: "")
-        let animaMenu = NSMenu(title: "ANIMA Suite")
-        animaMenu.addItem(withTitle: "Module Status", action: #selector(animaStatus(_:)), keyEquivalent: "")
-        animaMenu.addItem(withTitle: "ANIMA Compile", action: #selector(animaCompile(_:)), keyEquivalent: "")
-        animaMenu.addItem(withTitle: "ANIMA Plug", action: #selector(animaPlug(_:)), keyEquivalent: "")
-        animaItem.submenu = animaMenu
-        roboticsMenu.addItem(animaItem)
-        roboticsMenu.addItem(.separator())
-
-        // Hardware
-        let hwItem = NSMenuItem(title: "Hardware", action: nil, keyEquivalent: "")
-        let hwMenu = NSMenu(title: "Hardware")
-        hwMenu.addItem(withTitle: "Camera Status", action: #selector(hwCamera(_:)), keyEquivalent: "")
-        hwMenu.addItem(withTitle: "LiDAR Status", action: #selector(hwLidar(_:)), keyEquivalent: "")
-        hwMenu.addItem(withTitle: "IMU Status", action: #selector(hwImu(_:)), keyEquivalent: "")
-        hwMenu.addItem(withTitle: "Joy/Gamepad", action: #selector(hwJoy(_:)), keyEquivalent: "")
-        hwMenu.addItem(.separator())
-        hwMenu.addItem(withTitle: "USB Devices (system_profiler)", action: #selector(hwUsb(_:)), keyEquivalent: "")
-        hwMenu.addItem(withTitle: "Serial Ports", action: #selector(hwSerial(_:)), keyEquivalent: "")
-        hwMenu.addItem(.separator())
-        hwMenu.addItem(withTitle: "SSH to Robot...", action: #selector(hwSSH(_:)), keyEquivalent: "")
-        hwItem.submenu = hwMenu
-        roboticsMenu.addItem(hwItem)
-
-        let roboticsMenuItem = NSMenuItem()
-        roboticsMenuItem.submenu = roboticsMenu
-        mainMenu.addItem(roboticsMenuItem)
-
-        return mainMenu
-    }
-
     // MARK: - Menu actions
 
-    @objc private func newWindow(_ sender: Any?) {
+    @objc func newWindow(_ sender: Any?) {
         createNewWindow()
     }
 
-    @objc private func newTab(_ sender: Any?) {
+    @objc func newTab(_ sender: Any?) {
         focusedTabManager?.createTab()
     }
 
-    @objc private func closeTab(_ sender: Any?) {
+    @objc func closeTab(_ sender: Any?) {
         guard let mgr = focusedTabManager, let tab = mgr.selectedTab else { return }
         mgr.closeTab(tab.id)
     }
 
-    @objc private func nextTab(_ sender: Any?) {
+    @objc func nextTab(_ sender: Any?) {
         focusedTabManager?.selectNextTab()
     }
 
-    @objc private func previousTab(_ sender: Any?) {
+    @objc func previousTab(_ sender: Any?) {
         focusedTabManager?.selectPreviousTab()
     }
 
-    @objc private func splitRight(_ sender: Any?) {
+    @objc func toggleSidebar(_ sender: Any?) {
+        focusedTabManager?.isSidebarVisible.toggle()
+    }
+
+    @objc func closePane(_ sender: Any?) {
+        guard let mgr = focusedTabManager, let ws = mgr.selectedWorkspace,
+              let tab = ws.selectedTab, ws.splitLayout != nil else { return }
+        // Close the focused pane in a split — falls back to closeTab if only one pane
+        mgr.closeTab(tab.id)
+    }
+
+    @objc func splitRight(_ sender: Any?) {
         guard let mgr = focusedTabManager, let ws = mgr.selectedWorkspace, let tab = ws.selectedTab else { return }
         ws.createSplitTab(nextTo: tab.id, direction: .horizontal)
     }
 
-    @objc private func splitDown(_ sender: Any?) {
+    @objc func splitDown(_ sender: Any?) {
         guard let mgr = focusedTabManager, let ws = mgr.selectedWorkspace, let tab = ws.selectedTab else { return }
         ws.createSplitTab(nextTo: tab.id, direction: .vertical)
     }
 
-    @objc private func nextPane(_ sender: Any?) {
+    @objc func nextPane(_ sender: Any?) {
         guard let mgr = focusedTabManager, let ws = mgr.selectedWorkspace, let layout = ws.splitLayout else { return }
         let tabIds = layout.allTabIds
         guard tabIds.count > 1, let currentId = ws.selectedTabId,
@@ -321,7 +162,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func previousPane(_ sender: Any?) {
+    @objc func previousPane(_ sender: Any?) {
         guard let mgr = focusedTabManager, let ws = mgr.selectedWorkspace, let layout = ws.splitLayout else { return }
         let tabIds = layout.allTabIds
         guard tabIds.count > 1, let currentId = ws.selectedTabId,
@@ -333,7 +174,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    @objc private func selectTabByNumber(_ sender: NSMenuItem) {
+    @objc func selectTabByNumber(_ sender: NSMenuItem) {
         guard let mgr = focusedTabManager, let ws = mgr.selectedWorkspace else { return }
         let index = sender.tag - 1
         if sender.tag == 9 {
@@ -346,26 +187,107 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     // MARK: - Zoom actions
 
-    @objc private func zoomIn(_ sender: Any?) {
+    @objc func zoomIn(_ sender: Any?) {
         guard let mgr = focusedTabManager, let tab = mgr.selectedTab,
               let tv = tab.terminalView else { return }
-        let current = tv.font.pointSize ?? 13
-        tv.font = NSFont.monospacedSystemFont(ofSize: current + 1, weight: .regular)
+        let current = tv.font.pointSize
+        let newSize = current + 1
+        tv.font = NSFont(name: tv.font.fontName, size: newSize) ?? NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular)
     }
 
-    @objc private func zoomOut(_ sender: Any?) {
+    @objc func zoomOut(_ sender: Any?) {
         guard let mgr = focusedTabManager, let tab = mgr.selectedTab,
               let tv = tab.terminalView else { return }
-        let current = tv.font.pointSize ?? 13
+        let current = tv.font.pointSize
         if current > 8 {
-            tv.font = NSFont.monospacedSystemFont(ofSize: current - 1, weight: .regular)
+            let newSize = current - 1
+            tv.font = NSFont(name: tv.font.fontName, size: newSize) ?? NSFont.monospacedSystemFont(ofSize: newSize, weight: .regular)
         }
     }
 
-    @objc private func zoomReset(_ sender: Any?) {
+    @objc func zoomReset(_ sender: Any?) {
         guard let mgr = focusedTabManager, let tab = mgr.selectedTab,
               let tv = tab.terminalView else { return }
-        tv.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        let settings = TerminalSettings.shared
+        tv.font = NSFont(name: settings.fontName, size: settings.fontSize) ?? NSFont.monospacedSystemFont(ofSize: settings.fontSize, weight: .regular)
+    }
+
+    // MARK: - Preferences
+
+    @objc func openPreferences(_ sender: Any?) {
+        // If the preferences window already exists, bring it to front
+        if let existing = preferencesWindow {
+            if !existing.isVisible {
+                existing.center()
+            }
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+
+        // Create a standalone NSWindow hosting PreferencesView
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 700, height: 600),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "ROBOTERM Preferences"
+        window.contentView = NSHostingView(rootView: PreferencesView())
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+        preferencesWindow = window
+    }
+
+    // MARK: - Named session management
+
+    @objc func saveNamedSession(_ sender: Any?) {
+        let alert = NSAlert()
+        alert.messageText = "Save Session"
+        alert.informativeText = "Enter a name for this session profile:"
+        alert.addButton(withTitle: "Save")
+        alert.addButton(withTitle: "Cancel")
+
+        let textField = NSTextField(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        textField.stringValue = "default"
+        textField.placeholderString = "Session name"
+        alert.accessoryView = textField
+
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        let name = textField.stringValue.trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty else { return }
+
+        SessionStore.saveNamed(name: name, tabManagers: tabManagers)
+    }
+
+    @objc func loadNamedSession(_ sender: Any?) {
+        let sessions = SessionStore.listNamedSessions()
+        guard !sessions.isEmpty else {
+            let alert = NSAlert()
+            alert.messageText = "No Saved Sessions"
+            alert.informativeText = "Save a session first using File → Save Session."
+            alert.runModal()
+            return
+        }
+
+        let alert = NSAlert()
+        alert.messageText = "Load Session"
+        alert.informativeText = "Choose a session to restore:"
+        alert.addButton(withTitle: "Load")
+        alert.addButton(withTitle: "Cancel")
+
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 260, height: 24))
+        for name in sessions { popup.addItem(withTitle: name) }
+        alert.accessoryView = popup
+
+        guard alert.runModal() == .alertFirstButtonReturn,
+              let selected = popup.selectedItem?.title else { return }
+
+        if let session = SessionStore.restoreNamed(name: selected) {
+            _ = SessionStore.apply(session, to: self)
+        }
     }
 
     // MARK: - Robotics menu actions
@@ -387,69 +309,82 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     // ROS2 Introspection — run in current tab (quick queries)
-    @objc private func ros2NodeList(_ sender: Any?) { runCommand("ros2 node list") }
-    @objc private func ros2TopicList(_ sender: Any?) { runCommand("ros2 topic list -v") }
-    @objc private func ros2ServiceList(_ sender: Any?) { runCommand("ros2 service list") }
-    @objc private func ros2ActionList(_ sender: Any?) { runCommand("ros2 action list -t") }
-    @objc private func ros2ParamList(_ sender: Any?) { runCommand("ros2 param list") }
-    @objc private func ros2InterfaceList(_ sender: Any?) { runCommand("ros2 interface list") }
-    @objc private func ros2Graph(_ sender: Any?) { runCommandInNewTab("rqt_graph") }
+    @objc func ros2NodeList(_ sender: Any?) { runCommand("ros2 node list") }
+    @objc func ros2TopicList(_ sender: Any?) { runCommand("ros2 topic list -v") }
+    @objc func ros2ServiceList(_ sender: Any?) { runCommand("ros2 service list") }
+    @objc func ros2ActionList(_ sender: Any?) { runCommand("ros2 action list -t") }
+    @objc func ros2ParamList(_ sender: Any?) { runCommand("ros2 param list") }
+    @objc func ros2InterfaceList(_ sender: Any?) { runCommand("ros2 interface list") }
+    @objc func ros2Graph(_ sender: Any?) { runCommandInNewTab("rqt_graph") }
 
     // ROS2 Diagnostics — quick queries in current tab
-    @objc private func ros2Doctor(_ sender: Any?) { runCommand("ros2 doctor --report") }
-    @objc private func ros2DaemonStatus(_ sender: Any?) { runCommand("ros2 daemon status") }
-    @objc private func ros2Multicast(_ sender: Any?) { runCommandInNewTab("ros2 multicast receive") }
-    @objc private func ros2Wtf(_ sender: Any?) { runCommand("ros2 wtf") }
-    @objc private func ros2HzScan(_ sender: Any?) { runCommandInNewTab("ros2 topic hz /scan") }
-    @objc private func ros2HzCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic hz /camera/image_raw") }
-    @objc private func ros2DelayTf(_ sender: Any?) { runCommandInNewTab("ros2 topic delay /tf") }
+    @objc func ros2Doctor(_ sender: Any?) { runCommand("ros2 doctor --report") }
+    @objc func ros2DaemonStatus(_ sender: Any?) { runCommand("ros2 daemon status") }
+    @objc func ros2Multicast(_ sender: Any?) { runCommandInNewTab("ros2 multicast receive") }
+    @objc func ros2Wtf(_ sender: Any?) { runCommand("ros2 wtf") }
+    @objc func ros2HzScan(_ sender: Any?) { runCommandInNewTab("ros2 topic hz /scan") }
+    @objc func ros2HzCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic hz /camera/image_raw") }
+    @objc func ros2DelayTf(_ sender: Any?) { runCommandInNewTab("ros2 topic delay /tf") }
 
     // ROS2 Transforms
-    @objc private func ros2TfTree(_ sender: Any?) { runCommand("ros2 run tf2_tools view_frames") }
-    @objc private func ros2TfEcho(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_ros tf2_echo base_link map") }
-    @objc private func ros2TfMonitor(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_ros tf2_monitor") }
+    @objc func ros2TfTree(_ sender: Any?) { runCommand("ros2 run tf2_tools view_frames") }
+    @objc func ros2TfEcho(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_ros tf2_echo base_link map") }
+    @objc func ros2TfMonitor(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_ros tf2_monitor") }
 
     // Launch & Build — new tab (long-running)
-    @objc private func ros2Launch(_ sender: Any?) { runCommandInNewTab("ros2 launch ") }
-    @objc private func ros2Run(_ sender: Any?) { runCommandInNewTab("ros2 run ") }
-    @objc private func colconBuild(_ sender: Any?) { runCommandInNewTab("colcon build --symlink-install") }
-    @objc private func colconBuildSelect(_ sender: Any?) { runCommandInNewTab("colcon build --packages-select ") }
-    @objc private func colconTest(_ sender: Any?) { runCommandInNewTab("colcon test") }
+    @objc func ros2Launch(_ sender: Any?) { runCommandInNewTab("ros2 launch ") }
+    @objc func ros2Run(_ sender: Any?) { runCommandInNewTab("ros2 run ") }
+    @objc func colconBuild(_ sender: Any?) { runCommandInNewTab("colcon build --symlink-install") }
+    @objc func colconBuildSelect(_ sender: Any?) { runCommandInNewTab("colcon build --packages-select ") }
+    @objc func colconTest(_ sender: Any?) { runCommandInNewTab("colcon test") }
 
     // Bag Recording
-    @objc private func ros2BagRecord(_ sender: Any?) { runCommandInNewTab("ros2 bag record -a") }
-    @objc private func ros2BagRecordSelect(_ sender: Any?) { runCommandInNewTab("ros2 bag record ") }
-    @objc private func ros2BagPlay(_ sender: Any?) { runCommandInNewTab("ros2 bag play ") }
-    @objc private func ros2BagInfo(_ sender: Any?) { runCommandInNewTab("ros2 bag info ") }
+    @objc func ros2BagRecord(_ sender: Any?) { runCommandInNewTab("ros2 bag record -a") }
+    @objc func ros2BagRecordSelect(_ sender: Any?) { runCommandInNewTab("ros2 bag record ") }
+    @objc func ros2BagPlay(_ sender: Any?) { runCommandInNewTab("ros2 bag play ") }
+    @objc func ros2BagInfo(_ sender: Any?) { runCommandInNewTab("ros2 bag info ") }
 
     // Simulation
-    @objc private func launchGazebo(_ sender: Any?) { runCommandInNewTab("gz sim") }
-    @objc private func launchRViz2(_ sender: Any?) { runCommandInNewTab("rviz2") }
-    @objc private func launchRqt(_ sender: Any?) { runCommandInNewTab("rqt") }
-    @objc private func launchMuJoCo(_ sender: Any?) { runCommandInNewTab("python3 -m mujoco.viewer") }
-    @objc private func launchIsaacSim(_ sender: Any?) { runCommandInNewTab("isaac-sim") }
+    @objc func launchGazebo(_ sender: Any?) { runCommandInNewTab("gz sim") }
+    @objc func launchRViz2(_ sender: Any?) { runCommandInNewTab("rviz2") }
+    @objc func launchRqt(_ sender: Any?) { runCommandInNewTab("rqt") }
+    @objc func launchMuJoCo(_ sender: Any?) { runCommandInNewTab("python3 -m mujoco.viewer") }
+    @objc func launchIsaacSim(_ sender: Any?) { runCommandInNewTab("isaac-sim") }
 
     // Docker
-    @objc private func dockerPs(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
-    @objc private func animaComposeUp(_ sender: Any?) { runCommandInNewTab("docker compose up -d") }
-    @objc private func animaComposeDown(_ sender: Any?) { runCommandInNewTab("docker compose down") }
-    @objc private func animaLogs(_ sender: Any?) { runCommandInNewTab("docker compose logs -f --tail=50") }
-    @objc private func dockerPsAll(_ sender: Any?) { runCommandInNewTab("docker ps -a") }
-    @objc private func dockerImages(_ sender: Any?) { runCommandInNewTab("docker images") }
+    @objc func dockerPs(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
+    @objc func animaComposeUp(_ sender: Any?) { runCommandInNewTab("docker compose up -d") }
+    @objc func animaComposeDown(_ sender: Any?) { runCommandInNewTab("docker compose down") }
+    @objc func animaLogs(_ sender: Any?) { runCommandInNewTab("docker compose logs -f --tail=50") }
+    @objc func dockerPsAll(_ sender: Any?) { runCommandInNewTab("docker ps -a") }
+    @objc func dockerImages(_ sender: Any?) { runCommandInNewTab("docker images") }
 
     // ANIMA
-    @objc private func animaStatus(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
-    @objc private func animaCompile(_ sender: Any?) { runCommandInNewTab("anima compile") }
-    @objc private func animaPlug(_ sender: Any?) { runCommandInNewTab("anima plug") }
+    @objc func animaStatus(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
+    @objc func animaCompile(_ sender: Any?) { runCommandInNewTab("anima compile") }
+    @objc func animaPlug(_ sender: Any?) { runCommandInNewTab("anima plug") }
 
     // Hardware
-    @objc private func hwCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /camera/image_raw --once") }
-    @objc private func hwLidar(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /scan --once") }
-    @objc private func hwImu(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /imu/data --once") }
-    @objc private func hwJoy(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /joy --once") }
-    @objc private func hwUsb(_ sender: Any?) { runCommandInNewTab("system_profiler SPUSBDataType") }
-    @objc private func hwSerial(_ sender: Any?) { runCommandInNewTab("ls -la /dev/tty.* /dev/cu.*") }
-    @objc private func hwSSH(_ sender: Any?) { runCommandInNewTab("ssh ") }
+    @objc func hwCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /camera/image_raw --once") }
+    @objc func hwLidar(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /scan --once") }
+    @objc func hwImu(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /imu/data --once") }
+    @objc func hwJoy(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /joy --once") }
+    @objc func hwUsb(_ sender: Any?) { runCommandInNewTab("system_profiler SPUSBDataType") }
+    @objc func hwSerial(_ sender: Any?) { runCommandInNewTab("ls -la /dev/tty.* /dev/cu.*") }
+    @objc func connectSSHFromMenu(_ sender: NSMenuItem) {
+        guard let config = sender.representedObject as? SSHConnectionConfig else { return }
+        focusedTabManager?.createSSHTab(config: config)
+    }
+
+    @objc func hwSSH(_ sender: Any?) {
+        // If SSH connections are configured, connect to the first one; otherwise open preferences
+        let connections = TerminalSettings.shared.sshConnections
+        if let first = connections.first, !first.host.isEmpty {
+            focusedTabManager?.createSSHTab(config: first)
+        } else {
+            openPreferences(nil)
+        }
+    }
 }
 
 // MARK: - NSWindowDelegate

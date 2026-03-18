@@ -83,7 +83,8 @@
       <property name="name" code="pnam" type="text" access="r" description="Current terminal title.">
         <cocoa key="title"/>
       </property>
-      <property name="working directory" code="Rwdr" type="text" access="r" description="Current working directory for the terminal process."/>
+      <property name="working directory" code="Rwdr" type="text" access="r" description="Current working directory (or ssh:// URI for SSH terminals)."/>
+      <property name="is SSH" code="RssH" type="boolean" access="r" description="Whether this terminal is an SSH connection."/>
       <responds-to command="split">
         <cocoa method="handleSplitCommand:"/>
       </responds-to>

@@ -100,11 +100,13 @@ final class Workspace: Identifiable, ObservableObject {
 
     func closeTab(_ id: UUID) -> Bool {
         guard let index = tabs.firstIndex(where: { $0.id == id }) else { return false }
+        // Clean up terminal view before removing the tab
+        tabs[index].terminalView?.removeFromSuperview()
         tabs.remove(at: index)
 
         // Remove from split layout
         if let layout = splitLayout {
-            layout.removeTab(id)
+            _ = layout.removeTab(id)
             let remaining = layout.allTabIds
             if remaining.count <= 1 {
                 // Back to single pane

@@ -21,29 +21,34 @@
 
 Robotics developers on macOS suffer from **fragmented tooling** — jumping between `ros2` CLI, rqt, RViz, Foxglove, Docker, and SSH sessions. ROBOTERM unifies everything into one terminal with:
 
+- **Native SSH connections** — Cursor/Termius-style sidebar, one-click connect, direct PTY process
 - **One-click AI agents** (Claude Code, Codex) for agentic development
 - **30 `rt` CLI commands** for ROS2 introspection, debugging, and deployment
 - **Docker container management** with tree view, play/stop, shell access
 - **Hardware auto-detection** (cameras, LiDAR, Jetson, serial devices)
+- **ANIMA module management** — per-module Docker, ROS2, and SSH config
 - **Pure Swift** — zero C/Zig dependencies, SwiftTerm engine
 - **Industrial Cyberpunk design** matching the RobotFlow Labs ecosystem
 
 ```
-ROBOTERM (Swift, ~4600 lines)
+ROBOTERM (Swift, ~6500 lines + 1100 lines shell tools)
     |
     +-- Chrome Layer
     |   +-- Agent launcher bar (Claude Code, Codex + ROS2 buttons)
+    |   +-- SSH connections panel (one-click connect, direct PTY)
+    |   +-- ANIMA module panel (Docker status, SSH, ROS2 per-module)
     |   +-- Docker container panel (tree view, compose groups)
     |   +-- Hardware panel (IOKit USB hotplug detection)
-    |   +-- Status bar (CPU/MEM, git branch, ROS2 domain, clock)
+    |   +-- Status bar (CPU/MEM, git branch, ROS2 domain, SSH info)
+    |   +-- 5-tab preferences (General, Appearance, Agents, ANIMA, SSH)
     |   +-- Workspace sidebar (Industrial Cyberpunk design)
     |   +-- AppleScript support (SDEF + Cocoa scripting)
-    |   +-- Session persistence
+    |   +-- Session persistence (incl. SSH tab restore)
     |
     +-- SwiftTerm (pure Swift terminal engine via SPM)
         +-- Core Text rendering
         +-- VT100/xterm parser
-        +-- Built-in shell process management
+        +-- Built-in shell + SSH process management
         +-- Keyboard, mouse, clipboard handling
 ```
 
@@ -54,6 +59,23 @@ One-click launch for AI coding agents directly from the toolbar:
 - **Claude Code** — Anthropic's CLI agent
 - **Codex** — OpenAI's CLI agent
 - Quick buttons: nodes, topics, services, params, gazebo, rviz2, rqt, doctor, docker
+
+### Native SSH Connections
+Cursor/Termius-style SSH directly from the sidebar:
+- **Direct PTY process** — `/usr/bin/ssh` runs as the terminal process (no shell + sendText hack)
+- **Connection profiles** — saved in `~/.config/roboterm/ssh-connections.json`
+- **Sidebar panel** — "SSH CONNECTIONS" with one-click connect, cyan accent
+- **Tab differentiation** — SSH tabs show network icon, cyan indicator, `[SSH]` title prefix
+- **Key file support** — Browse button for `~/.ssh/` identity files
+- **Session persistence** — SSH tabs restore on relaunch
+- **Smart integration** — SSH tabs skip directory regrouping, status bar shows connection info, agents open in new local tab
+
+### ANIMA Module Management
+Per-module configuration for the ANIMA perception stack:
+- Docker container name, profile (CPU/GPU), ports, volumes, env vars
+- ROS2 node name and watched topics
+- SSH remote access with host, user, port, key path
+- One-click SSH connect from module context menu
 
 ### Docker Container Management
 VS Code-style container panel in the sidebar:
@@ -137,11 +159,13 @@ Industrial Cyberpunk theme matching [RobotFlow Labs](https://robotflowlabs.com):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `#FF3B00` | Orange | Accent, selected state |
+| `#FF3B00` | Orange | Accent, selected state, local tabs |
 | `#050505` | Void Black | Terminal background |
 | `#080808` | Near Black | Sidebar background |
-| `#00FF88` | Green | Status indicators |
-| `#00DDFF` | Cyan | Docker, cameras |
+| `#00FF88` | Green | Running status, ROS2 |
+| `#00DDFF` | Cyan | SSH connections, Docker, cameras |
+| `#8B5CFF` | Purple | GPU profiles |
+| `#FFB800` | Yellow | Warnings, tools |
 
 - CaskaydiaMono Nerd Font (Oh My Posh support)
 - No rounded corners — sharp, industrial
@@ -194,7 +218,7 @@ ROBOTERM is a **pure Swift** macOS terminal application using [SwiftTerm](https:
 
 ## Roadmap
 
-### Shipped (v0.2.0)
+### Shipped (v0.5.0)
 - [x] Pure Swift terminal (SwiftTerm engine)
 - [x] Agent launcher bar (Claude + Codex)
 - [x] Docker container management (tree view)
@@ -203,12 +227,17 @@ ROBOTERM is a **pure Swift** macOS terminal application using [SwiftTerm](https:
 - [x] Docker-ROS2 bridge (`rt connect`)
 - [x] IOKit USB hotplug detection
 - [x] AppleScript support
-- [x] Session persistence
+- [x] Session persistence (incl. SSH tabs)
 - [x] Hardware auto-detection
 - [x] Custom app icon
 - [x] Industrial Cyberpunk design
+- [x] ANIMA module management (per-module Docker/SSH/ROS2)
+- [x] Native SSH connections (direct PTY, sidebar panel, key files)
+- [x] 5-tab preferences (General, Appearance, Agents, ANIMA, SSH)
+- [x] Split panes (horizontal + vertical)
+- [x] Tab drag-and-drop reordering
 
-### Next (v0.3.0)
+### Next (v0.6.0)
 - [ ] RosSwift native integration (pub/sub without CLI)
 - [ ] Inline camera/LiDAR preview
 - [ ] Bag timeline viewer
