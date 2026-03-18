@@ -674,3 +674,148 @@ struct DeviceRow: View {
         .help(device.detail)
     }
 }
+
+// MARK: - Hardware Panel View (collapsible, same style as Docker panel)
+
+struct HardwarePanelView: View {
+    @ObservedObject private var state = HardwareState.shared
+    @State private var isExpanded = true
+
+    private var connectedCount: Int {
+        state.devices.filter { $0.status == .connected }.count
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            // Clickable header
+            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
+                HStack(spacing: 6) {
+                    Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                        .font(.system(size: 8, weight: .bold))
+                        .foregroundStyle(rfAccent.opacity(0.5))
+                        .frame(width: 10)
+
+                    Text("HARDWARE")
+                        .font(.system(size: 10, weight: .bold, design: .monospaced))
+                        .foregroundStyle(rfAccent.opacity(0.8))
+                        .tracking(1.5)
+
+                    Spacer()
+
+                    HStack(spacing: 3) {
+                        Circle().fill(connectedCount > 0 ? rfGreen : rfDim).frame(width: 5, height: 5)
+                        Text("\(connectedCount)/\(state.devices.count)")
+                            .font(.system(size: 9, weight: .bold, design: .monospaced))
+                            .foregroundStyle(connectedCount > 0 ? rfGreen.opacity(0.7) : rfDim)
+                    }
+
+                    Button(action: { state.scan() }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 9))
+                            .foregroundStyle(rfDim)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
+                    .padding(.horizontal, 8)
+
+                ForEach(state.devices) { device in
+                    HardwareDeviceRow(device: device)
+                }
+
+                // System status footer
+                Rectangle().fill(rfAccent.opacity(0.1)).frame(height: 1)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
+
+                HStack(spacing: 4) {
+                    Circle().fill(connectedCount > 0 ? rfGreen : rfDim).frame(width: 5, height: 5)
+                    Text(connectedCount > 0 ? "SYSTEM: ONLINE" : "SYSTEM: IDLE")
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
+                        .foregroundStyle(connectedCount > 0 ? rfGreen.opacity(0.6) : rfDim)
+                        .tracking(0.5)
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+            }
+        }
+    }
+}
+
+// MARK: - Hardware device row (same style as Docker container row)
+
+private struct HardwareDeviceRow: View {
+    let device: HardwareDevice
+    @State private var isHovering = false
+
+    private var statusColor: Color {
+        device.status == .connected ? rfGreen : rfDim
+    }
+
+    private var typeColor: Color {
+        switch device.type {
+        case .camera: return rfCyan
+        case .lidar: return rfAccent
+        case .imu: return rfYellow
+        case .compute: return rfGreen
+        case .gamepad, .serial: return rfDim
+        }
+    }
+
+    private var typeLabel: String {
+        switch device.type {
+        case .camera: return "CAM"
+        case .lidar: return "LDR"
+        case .imu: return "IMU"
+        case .compute: return "SBC"
+        case .gamepad: return "JOY"
+        case .serial: return "USB"
+        }
+    }
+
+    private var typeIcon: String {
+        switch device.type {
+        case .camera: return "camera"
+        case .lidar: return "sensor.tag.radiowaves.forward"
+        case .imu: return "gyroscope"
+        case .compute: return "cpu"
+        case .gamepad: return "gamecontroller"
+        case .serial: return "cable.connector"
+        }
+    }
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Circle().fill(statusColor).frame(width: 6, height: 6)
+
+            Image(systemName: typeIcon)
+                .font(.system(size: 9))
+                .foregroundStyle(device.status == .connected ? typeColor : rfDim)
+                .frame(width: 14)
+
+            Text(device.name)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(isHovering ? typeColor : (device.status == .connected ? .white.opacity(0.6) : rfDim))
+                .lineLimit(1)
+
+            Spacer()
+
+            Text(typeLabel)
+                .font(.system(size: 8, weight: .medium, design: .monospaced))
+                .foregroundStyle(device.status == .connected ? typeColor.opacity(0.5) : rfDim.opacity(0.5))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 3)
+        .background(isHovering ? typeColor.opacity(0.04) : Color.clear)
+        .contentShape(Rectangle())
+        .onHover { isHovering = $0 }
+        .help(device.detail)
+    }
+}
