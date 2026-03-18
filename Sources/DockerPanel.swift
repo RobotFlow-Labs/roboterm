@@ -137,6 +137,7 @@ private let dpBg      = Color(red: 0x08/255, green: 0x08/255, blue: 0x08/255)
 struct DockerPanelView: View {
     @ObservedObject private var state = DockerState.shared
     @ObservedObject var tabManager: TabManager
+    @State private var isExpanded = false
 
     private var runningCount: Int {
         state.containers.filter { $0.status == .running }.count
@@ -144,21 +145,27 @@ struct DockerPanelView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            DockerPanelHeader(
-                runningCount: runningCount,
-                totalCount: state.containers.count,
-                onRefresh: { state.refresh() }
-            )
+            // Clickable header to expand/collapse
+            Button(action: { withAnimation(.easeInOut(duration: 0.15)) { isExpanded.toggle() } }) {
+                DockerPanelHeader(
+                    runningCount: runningCount,
+                    totalCount: state.containers.count,
+                    isExpanded: isExpanded,
+                    onRefresh: { state.refresh() }
+                )
+            }
+            .buttonStyle(.plain)
 
-            Rectangle().fill(dpCyan.opacity(0.15)).frame(height: 1)
-                .padding(.horizontal, 8)
+            if isExpanded {
+                Rectangle().fill(dpCyan.opacity(0.15)).frame(height: 1)
+                    .padding(.horizontal, 8)
 
-            if state.containers.isEmpty {
-                DockerEmptyState()
-            } else {
-                ScrollView(.vertical, showsIndicators: false) {
-                    VStack(spacing: 0) {
-                        ForEach(state.containers) { container in
+                if state.containers.isEmpty {
+                    DockerEmptyState()
+                } else {
+                    ScrollView(.vertical, showsIndicators: true) {
+                        VStack(spacing: 0) {
+                            ForEach(state.containers) { container in
                             DockerContainerRow(
                                 container: container,
                                 onShell: { openShell(container) },
@@ -172,6 +179,7 @@ struct DockerPanelView: View {
                     }
                 }
                 .frame(maxHeight: 250)
+                }
             }
         }
     }
@@ -200,10 +208,16 @@ struct DockerPanelView: View {
 private struct DockerPanelHeader: View {
     let runningCount: Int
     let totalCount: Int
+    let isExpanded: Bool
     let onRefresh: () -> Void
 
     var body: some View {
         HStack(spacing: 6) {
+            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                .font(.system(size: 8, weight: .bold))
+                .foregroundStyle(dpCyan.opacity(0.5))
+                .frame(width: 10)
+
             Text("CONTAINERS")
                 .font(.system(size: 10, weight: .bold, design: .monospaced))
                 .foregroundStyle(dpCyan.opacity(0.8))
@@ -211,7 +225,6 @@ private struct DockerPanelHeader: View {
 
             Spacer()
 
-            // Running badge
             HStack(spacing: 3) {
                 Circle().fill(runningCount > 0 ? dpGreen : dpDim).frame(width: 5, height: 5)
                 Text("\(runningCount)/\(totalCount)")
@@ -219,7 +232,7 @@ private struct DockerPanelHeader: View {
                     .foregroundStyle(runningCount > 0 ? dpGreen.opacity(0.7) : dpDim)
             }
 
-            Button(action: onRefresh) {
+            Button(action: { onRefresh() }) {
                 Image(systemName: "arrow.clockwise")
                     .font(.system(size: 9))
                     .foregroundStyle(dpDim)
@@ -228,6 +241,7 @@ private struct DockerPanelHeader: View {
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .contentShape(Rectangle())
     }
 }
 

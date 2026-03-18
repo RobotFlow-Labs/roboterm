@@ -100,10 +100,8 @@ struct WorkspaceSidebar: View {
                         WorkspaceItemView(
                             workspace: workspace,
                             isSelected: workspace.id == tabManager.selectedWorkspaceId,
-                            onClose: { tabManager.closeWorkspace(workspace.id) }
-                        )
-                        .simultaneousGesture(
-                            TapGesture(count: 1).onEnded { tabManager.selectWorkspace(workspace.id) }
+                            onClose: { tabManager.closeWorkspace(workspace.id) },
+                            onSelect: { tabManager.selectWorkspace(workspace.id) }
                         )
                     }
                 }
@@ -229,6 +227,7 @@ struct WorkspaceItemView: View {
     @ObservedObject var workspace: Workspace
     let isSelected: Bool
     let onClose: () -> Void
+    let onSelect: () -> Void
     @State private var isHovering = false
     @State private var isEditing = false
     @State private var editText = ""
@@ -258,11 +257,12 @@ struct WorkspaceItemView: View {
 
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
-                    TextField("Name", text: $editText, onCommit: {
-                        let trimmed = editText.trimmingCharacters(in: .whitespaces)
-                        workspace.customName = trimmed.isEmpty ? nil : trimmed
-                        isEditing = false
-                    })
+                    TextField("Name", text: $editText)
+                        .onSubmit {
+                            let trimmed = editText.trimmingCharacters(in: .whitespaces)
+                            workspace.customName = trimmed.isEmpty ? nil : trimmed
+                            isEditing = false
+                        }
                     .textFieldStyle(.plain)
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
                     .foregroundColor(.white.opacity(0.9))
@@ -328,6 +328,9 @@ struct WorkspaceItemView: View {
         .onTapGesture(count: 2) {
             editText = workspace.customName ?? workspace.displayName
             isEditing = true
+        }
+        .onTapGesture(count: 1) {
+            if !isEditing { onSelect() }
         }
         .contextMenu {
             Button("Rename Workspace") {
