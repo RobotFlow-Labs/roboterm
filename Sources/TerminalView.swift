@@ -55,7 +55,7 @@ class RobotermTerminal: LocalProcessTerminalView {
         processDelegate = delegate
 
         configureAppearance()
-        installKeyMonitor()
+        Self.installGlobalKeyMonitor()
 
         // Re-apply appearance when relevant settings change
         let s = TerminalSettings.shared
@@ -91,34 +91,52 @@ class RobotermTerminal: LocalProcessTerminalView {
         return super.performKeyEquivalent(with: event)
     }
 
-    /// NSEvent local monitor to intercept Cmd+key BEFORE SwiftTerm's keyDown
-    /// processes them. SwiftTerm's keyDown is `public` (not `open`) so we can't
-    /// override it. This monitor runs first in the event pipeline.
-    private var keyMonitor: Any?
+    /// Global key monitor — intercepts Cmd+key BEFORE SwiftTerm's non-overridable
+    /// keyDown processes them. Installed once for all terminals.
+    private static var globalKeyMonitor: Any?
 
-    private func installKeyMonitor() {
-        guard keyMonitor == nil else { return }
-        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            guard let self, self.window?.firstResponder === self else { return event }
+    /// Map of Cmd+key to AppDelegate selectors for shortcuts that SwiftTerm eats.
+    private static let cmdKeyActions: [String: Selector] = [
+        "n": #selector(AppDelegate.newWindow(_:)),
+        "t": #selector(AppDelegate.newTab(_:)),
+        "w": #selector(AppDelegate.closeTab(_:)),
+        ",": #selector(AppDelegate.openPreferences(_:)),
+        "d": #selector(AppDelegate.splitRight(_:)),
+        "\\": #selector(AppDelegate.toggleSidebar(_:)),
+        "=": #selector(AppDelegate.zoomIn(_:)),
+        "-": #selector(AppDelegate.zoomOut(_:)),
+        "0": #selector(AppDelegate.zoomReset(_:)),
+    ]
+
+    private static func installGlobalKeyMonitor() {
+        guard globalKeyMonitor == nil else { return }
+        globalKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            // Only intercept when a terminal view is the first responder
+            guard let responder = NSApp.keyWindow?.firstResponder,
+                  responder is RobotermTerminal || responder.isDescendant(ofTerminal: true) else {
+                return event
+            }
             let flags = event.modifierFlags.intersection(.deviceIndependentFlagsMask)
-            if flags.contains(.command) && !flags.contains(.control) {
+            // Cmd+key (no Ctrl) — dispatch directly to AppDelegate
+            if flags.contains(.command) && !flags.contains(.control),
+               let chars = event.charactersIgnoringModifiers,
+               let action = cmdKeyActions[chars] {
+                if let appDelegate = AppDelegate.shared {
+                    appDelegate.perform(action, with: nil)
+                    return nil // consumed
+                }
+            }
+            // Cmd+Shift+key combos — let the menu handle
+            if flags.contains(.command) {
                 if let mainMenu = NSApp.mainMenu, mainMenu.performKeyEquivalent(with: event) {
-                    return nil // consumed by menu
+                    return nil
                 }
             }
             return event
         }
     }
 
-    private func removeKeyMonitor() {
-        if let monitor = keyMonitor {
-            NSEvent.removeMonitor(monitor)
-            keyMonitor = nil
-        }
-    }
-
     deinit {
-        removeKeyMonitor()
         Self.liveTerminals.remove(ObjectIdentifier(self))
         if Self.liveTerminals.isEmpty, let monitor = Self.sharedMouseMonitor {
             NSEvent.removeMonitor(monitor)
@@ -499,4 +517,18 @@ extension Notification.Name {
     static let terminalTitleChanged     = Notification.Name("terminalTitleChanged")
     static let terminalDirectoryChanged = Notification.Name("terminalDirectoryChanged")
     static let terminalProcessExited    = Notification.Name("terminalProcessExited")
+}
+
+// MARK: - NSResponder helper
+
+private extension NSResponder {
+    /// Check if this responder is or is inside a RobotermTerminal.
+    func isDescendant(ofTerminal _: Bool) -> Bool {
+        var current: NSResponder? = self
+        while let r = current {
+            if r is RobotermTerminal { return true }
+            current = r.nextResponder
+        }
+        return false
+    }
 }
