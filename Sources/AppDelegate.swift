@@ -116,6 +116,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         viewMenu.items.last?.keyEquivalentModifierMask = [.command, .option]
         viewMenu.addItem(withTitle: "Previous Pane", action: #selector(previousPane(_:)), keyEquivalent: "[")
         viewMenu.items.last?.keyEquivalentModifierMask = [.command, .option]
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Zoom In", action: #selector(zoomIn(_:)), keyEquivalent: "+")
+        viewMenu.addItem(withTitle: "Zoom Out", action: #selector(zoomOut(_:)), keyEquivalent: "-")
+        viewMenu.addItem(withTitle: "Reset Zoom", action: #selector(zoomReset(_:)), keyEquivalent: "0")
+        viewMenu.addItem(.separator())
+        viewMenu.addItem(withTitle: "Toggle Fullscreen", action: #selector(NSWindow.toggleFullScreen(_:)), keyEquivalent: "f")
+        viewMenu.items.last?.keyEquivalentModifierMask = [.command, .control]
         let viewMenuItem = NSMenuItem()
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
@@ -335,6 +342,30 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else if index >= 0, index < ws.tabs.count {
             ws.selectTab(ws.tabs[index].id)
         }
+    }
+
+    // MARK: - Zoom actions
+
+    @objc private func zoomIn(_ sender: Any?) {
+        guard let mgr = focusedTabManager, let tab = mgr.selectedTab,
+              let tv = tab.terminalView else { return }
+        let current = tv.font.pointSize ?? 13
+        tv.font = NSFont.monospacedSystemFont(ofSize: current + 1, weight: .regular)
+    }
+
+    @objc private func zoomOut(_ sender: Any?) {
+        guard let mgr = focusedTabManager, let tab = mgr.selectedTab,
+              let tv = tab.terminalView else { return }
+        let current = tv.font.pointSize ?? 13
+        if current > 8 {
+            tv.font = NSFont.monospacedSystemFont(ofSize: current - 1, weight: .regular)
+        }
+    }
+
+    @objc private func zoomReset(_ sender: Any?) {
+        guard let mgr = focusedTabManager, let tab = mgr.selectedTab,
+              let tv = tab.terminalView else { return }
+        tv.font = NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
     }
 
     // MARK: - Robotics menu actions

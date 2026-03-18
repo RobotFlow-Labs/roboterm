@@ -114,6 +114,13 @@ class RobotermTerminal: LocalProcessTerminalView {
         env["TERM_PROGRAM"] = "roboterm"
         env["ROBOTERM"] = "1"
         env["COLORTERM"] = "truecolor"
+
+        // Fix locale warnings — ensure LC_* vars are set
+        let locale = env["LANG"] ?? "en_US.UTF-8"
+        env["LANG"] = locale
+        env["LC_ALL"] = locale
+        env["LC_CTYPE"] = "UTF-8"
+        env["LC_COLLATE"] = locale
         if let toolsPath = Bundle.main.path(forResource: "roboterm-tools", ofType: "sh") {
             env["ROBOTERM_TOOLS"] = toolsPath
         } else {

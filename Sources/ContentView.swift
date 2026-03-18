@@ -147,7 +147,7 @@ struct WorkspaceSidebar: View {
                             .fill(device.status == .connected ? rfGreen : Color.white.opacity(0.2))
                             .frame(width: 5, height: 5)
                         Text(device.name.uppercased())
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundColor(device.status == .connected ? .white.opacity(0.5) : .white.opacity(0.2))
                             .lineLimit(1)
                         Spacer()
@@ -155,7 +155,7 @@ struct WorkspaceSidebar: View {
                              device.type == .compute ? "SBC" :
                              device.type == .lidar ? "LDR" :
                              device.type == .serial ? "USB" : "DEV")
-                            .font(.system(size: 7, weight: .medium, design: .monospaced))
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
                             .foregroundColor(device.status == .connected ?
                                 (device.type == .camera ? Color(red: 0, green: 0.87, blue: 1) :
                                  device.type == .compute ? rfGreen : rfAccent).opacity(0.5) :
@@ -175,13 +175,13 @@ struct WorkspaceSidebar: View {
                 HStack(spacing: 4) {
                     Circle().fill(connectedCount > 0 ? rfGreen : Color.white.opacity(0.2)).frame(width: 5, height: 5)
                     Text(connectedCount > 0 ? "SYSTEM: ONLINE" : "SYSTEM: IDLE")
-                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .font(.system(size: 9, weight: .medium, design: .monospaced))
                         .foregroundColor(connectedCount > 0 ? rfGreen.opacity(0.6) : Color.white.opacity(0.3))
                         .tracking(0.5)
                     Spacer()
                     if totalCount > 0 {
                         Text("\(connectedCount)/\(totalCount)")
-                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .font(.system(size: 10, weight: .bold, design: .monospaced))
                             .foregroundColor(rfAccent.opacity(0.4))
                     }
                 }
