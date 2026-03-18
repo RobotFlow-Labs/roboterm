@@ -1,0 +1,34 @@
+# ROBOTERM — RobotFlow Labs Industrial Cyberpunk Theme
+
+background = 050505
+foreground = f3f3f3
+
+cursor-color = FF3B00
+cursor-style = block
+
+selection-background = 333333
+selection-foreground = f3f3f3
+
+# Industrial Cyberpunk palette
+palette = 0=1A1A1A
+palette = 1=FF3B00
+palette = 2=00FF88
+palette = 3=FFB800
+palette = 4=4488FF
+palette = 5=FF44CC
+palette = 6=00DDFF
+palette = 7=CCCCCC
+palette = 8=555555
+palette = 9=FF6633
+palette = 10=33FFAA
+palette = 11=FFCC33
+palette = 12=6699FF
+palette = 13=FF77DD
+palette = 14=33EEFF
+palette = 15=FFFFFF
+
+font-family = JetBrains Mono
+font-size = 13
+
+window-padding-x = 4
+window-padding-y = 4

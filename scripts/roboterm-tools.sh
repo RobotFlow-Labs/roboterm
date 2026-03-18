@@ -431,6 +431,218 @@ rt-docker() {
 }
 
 # ============================================================
+# rt lifecycle — Node lifecycle management
+# ============================================================
+rt-lifecycle() {
+    _rt_header "Lifecycle Nodes"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    local cmd="${1:-list}"
+    case "$cmd" in
+        list)
+            ros2 lifecycle nodes 2>/dev/null | while IFS= read -r node; do
+                local state=$(ros2 lifecycle get "$node" 2>/dev/null | tail -1)
+                case "$state" in
+                    *active*)       _rt_ok "$node — ${state}" ;;
+                    *inactive*)     _rt_warn "$node — ${state}" ;;
+                    *unconfigured*) _rt_info "$node — ${state}" ;;
+                    *)              _rt_dim "$node — ${state}" ;;
+                esac
+            done
+            ;;
+        get)    shift; ros2 lifecycle get "$@" ;;
+        set)    shift; ros2 lifecycle set "$@" ;;
+        *)      echo "Usage: rt lifecycle [list|get <node>|set <node> <state>]" ;;
+    esac
+}
+
+# ============================================================
+# rt sensor — Sensor monitoring
+# ============================================================
+rt-sensor() {
+    _rt_header "Sensor Monitor"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    local cmd="${1:-list}"
+    case "$cmd" in
+        list)
+            echo -e "${_RT_DIM}  Searching for sensor topics...${_RT_RESET}"
+            echo ""
+            # Camera topics
+            ros2 topic list 2>/dev/null | grep -i "camera\|image\|rgb\|depth" | while read t; do
+                local hz=$(timeout 3 ros2 topic hz "$t" --window 3 2>/dev/null | head -1 | awk '{print $NF}')
+                _rt_ok "CAM  $t  ${hz:-?}Hz"
+            done
+            # LiDAR topics
+            ros2 topic list 2>/dev/null | grep -i "scan\|lidar\|points\|cloud" | while read t; do
+                _rt_ok "LDR  $t"
+            done
+            # IMU topics
+            ros2 topic list 2>/dev/null | grep -i "imu\|accel\|gyro\|mag" | while read t; do
+                _rt_ok "IMU  $t"
+            done
+            # GPS topics
+            ros2 topic list 2>/dev/null | grep -i "gps\|fix\|nav_sat" | while read t; do
+                _rt_ok "GPS  $t"
+            done
+            ;;
+        watch)
+            shift
+            if [ -z "$1" ]; then echo "Usage: rt sensor watch <topic>"; return 1; fi
+            ros2 topic echo "$@"
+            ;;
+        hz)
+            shift
+            if [ -z "$1" ]; then echo "Usage: rt sensor hz <topic>"; return 1; fi
+            ros2 topic hz "$@"
+            ;;
+        bw)
+            shift
+            if [ -z "$1" ]; then echo "Usage: rt sensor bw <topic>"; return 1; fi
+            ros2 topic bw "$@"
+            ;;
+        *)
+            echo "Usage: rt sensor [list|watch <topic>|hz <topic>|bw <topic>]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt ssh — SSH to configured robots
+# ============================================================
+rt-ssh() {
+    _rt_header "SSH Robot Access"
+    echo ""
+
+    if [ -z "$1" ]; then
+        # List configured hosts
+        if [ -f ~/.config/roboterm/hosts.json ]; then
+            python3 -c "
+import json
+with open('$HOME/.config/roboterm/hosts.json') as f:
+    hosts = json.load(f)
+for i, h in enumerate(hosts):
+    print(f'  [{i+1}] {h[\"name\"]:20s} {h[\"host\"]:20s} ({h[\"type\"]})')
+" 2>/dev/null
+            echo ""
+            echo -e "${_RT_DIM}  Usage: rt ssh <name_or_number>${_RT_RESET}"
+        else
+            _rt_warn "No hosts configured. Create ~/.config/roboterm/hosts.json"
+        fi
+        return 0
+    fi
+
+    # Connect by name or number
+    local target="$1"
+    local host=$(python3 -c "
+import json, sys
+with open('$HOME/.config/roboterm/hosts.json') as f:
+    hosts = json.load(f)
+t = '$target'
+if t.isdigit():
+    idx = int(t) - 1
+    if 0 <= idx < len(hosts):
+        print(hosts[idx]['host'])
+else:
+    for h in hosts:
+        if h['name'].lower() == t.lower():
+            print(h['host'])
+            break
+" 2>/dev/null)
+
+    if [ -n "$host" ]; then
+        _rt_info "Connecting to: $host"
+        ssh "$host"
+    else
+        _rt_err "Host '$target' not found"
+    fi
+}
+
+# ============================================================
+# rt watch — Watch multiple topics at once
+# ============================================================
+rt-watch() {
+    _rt_header "Topic Watch"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    if [ -z "$1" ]; then
+        echo "Usage: rt watch <topic1> [topic2] ..."
+        echo "       rt watch --all (watch all topics hz)"
+        return 1
+    fi
+
+    if [ "$1" = "--all" ]; then
+        # Show all topics with their hz
+        while true; do
+            clear
+            _rt_header "All Topics (Live)"
+            echo ""
+            echo -e "${_RT_DIM}  TOPIC                                    HZ${_RT_RESET}"
+            echo -e "${_RT_DIM}  ─────────────────────────────────────────────${_RT_RESET}"
+            ros2 topic list 2>/dev/null | while read t; do
+                printf "  %-40s" "$t"
+                timeout 2 ros2 topic hz "$t" --window 2 2>/dev/null | head -1 | awk '{printf "%.1f Hz\n", $NF}' || echo "?"
+            done
+            sleep 5
+        done
+    else
+        # Watch specific topics
+        for topic in "$@"; do
+            echo -e "${_RT_GREEN}●${_RT_RESET} Watching: $topic"
+            ros2 topic echo "$topic" --once 2>/dev/null &
+        done
+        wait
+    fi
+}
+
+# ============================================================
+# rt kill — Kill a ROS2 node
+# ============================================================
+rt-kill() {
+    if [ -z "$1" ]; then
+        echo "Usage: rt kill <node_name>"
+        return 1
+    fi
+    _rt_header "Kill Node"
+    _rt_warn "Killing: $1"
+    # Try lifecycle transition first
+    ros2 lifecycle set "$1" shutdown 2>/dev/null || \
+    # Fallback: find PID and kill
+    pkill -f "$1" 2>/dev/null
+}
+
+# ============================================================
+# rt graph — ASCII node graph
+# ============================================================
+rt-graph() {
+    _rt_header "Node Graph"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    echo -e "${_RT_DIM}  Mapping node connections...${_RT_RESET}"
+    echo ""
+
+    ros2 node list 2>/dev/null | while IFS= read -r node; do
+        echo -e "  ${_RT_ORANGE}${_RT_BOLD}$node${_RT_RESET}"
+
+        # Publishers
+        ros2 node info "$node" 2>/dev/null | grep -A50 "Publishers:" | grep -B0 "Subscribers:\|Service Servers:\|$" | grep "/" | head -5 | while read topic; do
+            echo -e "    ${_RT_GREEN}→ PUB${_RT_RESET} $topic"
+        done
+
+        # Subscribers
+        ros2 node info "$node" 2>/dev/null | grep -A50 "Subscribers:" | grep -B0 "Service Servers:\|Service Clients:\|$" | grep "/" | head -5 | while read topic; do
+            echo -e "    ${_RT_CYAN}← SUB${_RT_RESET} $topic"
+        done
+
+        echo ""
+    done
+}
+
+# ============================================================
 # rt — Main entry point / help
 # ============================================================
 rt() {
@@ -450,6 +662,12 @@ rt() {
         launch)     shift; rt-launch "$@" ;;
         dds)        shift; rt-dds "$@" ;;
         docker)     shift; rt-docker "$@" ;;
+        lifecycle)  shift; rt-lifecycle "$@" ;;
+        sensor)     shift; rt-sensor "$@" ;;
+        ssh)        shift; rt-ssh "$@" ;;
+        watch)      shift; rt-watch "$@" ;;
+        kill)       shift; rt-kill "$@" ;;
+        graph)      shift; rt-graph "$@" ;;
         help|*)
             echo -e "${_RT_ORANGE}${_RT_BOLD}"
             echo "  ____   ___  ____   ___ _____ _____ ____  __  __ "
@@ -474,12 +692,18 @@ rt() {
             echo -e "  ${_RT_ORANGE}rt launch${_RT_RESET}      Enhanced ros2 launch"
             echo -e "  ${_RT_ORANGE}rt dds${_RT_RESET}         DDS configuration & diagnostics"
             echo -e "  ${_RT_ORANGE}rt docker${_RT_RESET}      Docker helpers [ps|up|down|logs|shell]"
+            echo -e "  ${_RT_ORANGE}rt lifecycle${_RT_RESET}  Node lifecycle [list|get|set]"
+            echo -e "  ${_RT_ORANGE}rt sensor${_RT_RESET}     Sensor monitor [list|watch|hz|bw]"
+            echo -e "  ${_RT_ORANGE}rt ssh${_RT_RESET}        SSH to robot [name|number]"
+            echo -e "  ${_RT_ORANGE}rt watch${_RT_RESET}      Watch topics [topic...|--all]"
+            echo -e "  ${_RT_ORANGE}rt kill${_RT_RESET}       Kill a ROS2 node"
+            echo -e "  ${_RT_ORANGE}rt graph${_RT_RESET}      ASCII node connection graph"
             echo ""
             ;;
     esac
 }
 
 # Auto-complete
-complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker help" rt
+complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph help" rt
 
 echo -e "${_RT_DIM}ROBOTERM tools loaded. Type ${_RT_ORANGE}rt${_RT_RESET}${_RT_DIM} for help.${_RT_RESET}"
