@@ -389,13 +389,34 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     @objc func hwSSH(_ sender: Any?) {
-        // If SSH connections are configured, connect to the first one; otherwise open preferences
-        let connections = TerminalSettings.shared.sshConnections
-        if let first = connections.first, !first.host.isEmpty {
-            ensureTabManager().createSSHTab(config: first)
-        } else {
+        let connections = TerminalSettings.shared.sshConnections.filter { !$0.host.isEmpty }
+        guard !connections.isEmpty else {
             openPreferences(nil)
+            return
         }
+        // Single connection → connect directly
+        if connections.count == 1 {
+            ensureTabManager().createSSHTab(config: connections[0])
+            return
+        }
+        // Multiple → show picker popup
+        let menu = NSMenu(title: "SSH Connect")
+        for conn in connections {
+            let item = NSMenuItem(title: "\(conn.label)  (\(conn.user.isEmpty ? "" : conn.user + "@")\(conn.host))",
+                                  action: #selector(sshPickerSelected(_:)), keyEquivalent: "")
+            item.target = self
+            item.representedObject = conn
+            menu.addItem(item)
+        }
+        menu.addItem(.separator())
+        menu.addItem(withTitle: "Manage Connections…", action: #selector(openPreferences(_:)), keyEquivalent: "")
+        // Show at mouse location
+        menu.popUp(positioning: nil, at: NSEvent.mouseLocation, in: nil)
+    }
+
+    @objc private func sshPickerSelected(_ sender: NSMenuItem) {
+        guard let conn = sender.representedObject as? SSHConnectionConfig else { return }
+        ensureTabManager().createSSHTab(config: conn)
     }
 }
 
