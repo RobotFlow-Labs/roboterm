@@ -90,7 +90,32 @@ extension AppDelegate {
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)
 
+        // 7. Help menu
+        let helpMenu = NSMenu(title: "Help")
+        helpMenu.addItem(withTitle: "ROBOTERM on GitHub", action: #selector(openGitHub(_:)), keyEquivalent: "")
+        helpMenu.addItem(withTitle: "RobotFlow Labs", action: #selector(openWebsite(_:)), keyEquivalent: "")
+        helpMenu.addItem(.separator())
+        helpMenu.addItem(withTitle: "rt CLI Reference", action: #selector(showRtHelp(_:)), keyEquivalent: "")
+        let helpMenuItem = NSMenuItem()
+        helpMenuItem.submenu = helpMenu
+        mainMenu.addItem(helpMenuItem)
+
         return mainMenu
+    }
+
+    @objc func openGitHub(_ sender: Any?) {
+        NSWorkspace.shared.open(URL(string: "https://github.com/RobotFlow-Labs/roboterm")!)
+    }
+
+    @objc func openWebsite(_ sender: Any?) {
+        NSWorkspace.shared.open(URL(string: "https://robotflowlabs.com")!)
+    }
+
+    @objc func showRtHelp(_ sender: Any?) {
+        guard let tab = focusedTabManager?.selectedTab ?? focusedTabManager?.createTab() else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            tab.terminalView?.sendText("rt help\n")
+        }
     }
 
     private func buildRoboticsMenuItem() -> NSMenuItem {
