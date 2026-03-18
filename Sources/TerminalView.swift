@@ -126,8 +126,9 @@ class RobotermTerminal: LocalProcessTerminalView {
                     return nil // consumed
                 }
             }
-            // Cmd+Shift+key combos — let the menu handle
-            if flags.contains(.command) {
+            // Cmd+Shift+key combos (SSH, split down, etc.) — let the menu handle.
+            // Plain Cmd+key not in our map (C, V, A, etc.) passes through to SwiftTerm.
+            if flags.contains(.command) && flags.contains(.shift) {
                 if let mainMenu = NSApp.mainMenu, mainMenu.performKeyEquivalent(with: event) {
                     return nil
                 }

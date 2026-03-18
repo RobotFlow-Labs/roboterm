@@ -23,7 +23,7 @@ Robotics developers on macOS suffer from **fragmented tooling** — jumping betw
 
 - **Native SSH connections** — Cursor/Termius-style sidebar, one-click connect, direct PTY process
 - **One-click AI agents** (Claude Code, Codex) for agentic development
-- **30 `rt` CLI commands** for ROS2 introspection, debugging, and deployment
+- **31 `rt` CLI commands** for ROS2 introspection, debugging, and deployment
 - **Docker container management** with tree view, play/stop, shell access
 - **Hardware auto-detection** (cameras, LiDAR, Jetson, serial devices)
 - **ANIMA module management** — per-module Docker, ROS2, and SSH config
@@ -149,8 +149,10 @@ IOKit USB hotplug monitor with dedicated CFRunLoop thread:
 Full Cocoa scripting support with SDEF dictionary:
 ```applescript
 tell application "ROBOTERM"
-    set w to (new window)
-    input text "ros2 topic list" to focused terminal of selected tab of w
+    new window           -- creates a new window
+    new tab              -- creates a new tab
+    count windows        -- returns the number of open windows
+    get version          -- returns "0.5.0"
 end tell
 ```
 
@@ -223,7 +225,7 @@ ROBOTERM is a **pure Swift** macOS terminal application using [SwiftTerm](https:
 - [x] Agent launcher bar (Claude + Codex)
 - [x] Docker container management (tree view)
 - [x] 60+ ROS2 menu commands
-- [x] 30 `rt` CLI commands
+- [x] 31 `rt` CLI commands
 - [x] Docker-ROS2 bridge (`rt connect`)
 - [x] IOKit USB hotplug detection
 - [x] AppleScript support
