@@ -643,11 +643,63 @@ rt-graph() {
 }
 
 # ============================================================
+# rt status — One-line system status
+# ============================================================
+rt-status() {
+    local ros2_status="OFF"
+    local nodes=0
+    local topics=0
+    local docker_status="OFF"
+
+    if command -v ros2 &>/dev/null; then
+        ros2_status="${ROS_DISTRO:-?}"
+        nodes=$(ros2 node list 2>/dev/null | wc -l | tr -d ' ')
+        topics=$(ros2 topic list 2>/dev/null | wc -l | tr -d ' ')
+    fi
+
+    if docker info &>/dev/null 2>&1; then
+        docker_status="ON"
+    fi
+
+    local usb_count=$(ioreg -p IOUSB -l 2>/dev/null | grep -c "USB Product Name" || echo "0")
+
+    echo -e "${_RT_ORANGE}ROBOTERM${_RT_RESET} | ROS2:${_RT_GREEN}${ros2_status}${_RT_RESET} | Nodes:${nodes} | Topics:${topics} | Docker:${_RT_GREEN}${docker_status}${_RT_RESET} | USB:${usb_count} | Domain:${ROS_DOMAIN_ID:-0}"
+}
+
+# ============================================================
+# rt info — Show ROBOTERM version and environment
+# ============================================================
+rt-info() {
+    _rt_header "Environment"
+    echo ""
+    _rt_info "ROBOTERM v${ROBOTERM_VERSION}"
+    _rt_info "Shell: $SHELL"
+    _rt_info "Term: ${TERM_PROGRAM:-unknown}"
+    _rt_info "Arch: $(uname -m)"
+    _rt_info "macOS: $(sw_vers -productVersion 2>/dev/null || echo 'unknown')"
+    _rt_info "Chip: $(sysctl -n machdep.cpu.brand_string 2>/dev/null || echo 'Apple Silicon')"
+    echo ""
+    if [ -n "$ROS_DISTRO" ]; then
+        _rt_ok "ROS2: $ROS_DISTRO"
+    else
+        _rt_dim "ROS2: not sourced"
+    fi
+    _rt_info "Domain: ${ROS_DOMAIN_ID:-0}"
+    _rt_info "DDS: ${RMW_IMPLEMENTATION:-default}"
+    echo ""
+    _rt_info "Config: ~/.config/roboterm/"
+    _rt_info "Hosts: ~/.config/roboterm/hosts.json"
+    _rt_info "Theme: ~/.config/ghostty/config"
+}
+
+# ============================================================
 # rt — Main entry point / help
 # ============================================================
 rt() {
     local cmd="${1:-help}"
     case "$cmd" in
+        status)     shift; rt-status "$@" ;;
+        info)       shift; rt-info "$@" ;;
         init)       shift; rt-init "$@" ;;
         nodes)      shift; rt-nodes "$@" ;;
         topics)     shift; rt-topics "$@" ;;
@@ -704,6 +756,6 @@ rt() {
 }
 
 # Auto-complete
-complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph help" rt
+complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info help" rt
 
 echo -e "${_RT_DIM}ROBOTERM tools loaded. Type ${_RT_ORANGE}rt${_RT_RESET}${_RT_DIM} for help.${_RT_RESET}"
