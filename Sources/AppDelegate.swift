@@ -149,52 +149,117 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Robotics menu
         let roboticsMenu = NSMenu(title: "Robotics")
 
-        // ROS2 section
-        roboticsMenu.addItem(withTitle: "ROS2 Node List", action: #selector(ros2NodeList(_:)), keyEquivalent: "")
-        roboticsMenu.addItem(withTitle: "ROS2 Topic List", action: #selector(ros2TopicList(_:)), keyEquivalent: "")
-        roboticsMenu.addItem(withTitle: "ROS2 Service List", action: #selector(ros2ServiceList(_:)), keyEquivalent: "")
+        // ROS2 Introspection
+        let ros2IntrospectItem = NSMenuItem(title: "ROS2 Introspect", action: nil, keyEquivalent: "")
+        let ros2IntrospectMenu = NSMenu(title: "ROS2 Introspect")
+        ros2IntrospectMenu.addItem(withTitle: "Node List", action: #selector(ros2NodeList(_:)), keyEquivalent: "")
+        ros2IntrospectMenu.addItem(withTitle: "Topic List (verbose)", action: #selector(ros2TopicList(_:)), keyEquivalent: "")
+        ros2IntrospectMenu.addItem(withTitle: "Service List", action: #selector(ros2ServiceList(_:)), keyEquivalent: "")
+        ros2IntrospectMenu.addItem(withTitle: "Action List", action: #selector(ros2ActionList(_:)), keyEquivalent: "")
+        ros2IntrospectMenu.addItem(withTitle: "Parameter List", action: #selector(ros2ParamList(_:)), keyEquivalent: "")
+        ros2IntrospectMenu.addItem(withTitle: "Interface List", action: #selector(ros2InterfaceList(_:)), keyEquivalent: "")
+        ros2IntrospectMenu.addItem(.separator())
+        ros2IntrospectMenu.addItem(withTitle: "Node Graph (rqt_graph)", action: #selector(ros2Graph(_:)), keyEquivalent: "")
+        ros2IntrospectItem.submenu = ros2IntrospectMenu
+        roboticsMenu.addItem(ros2IntrospectItem)
+
+        // ROS2 Diagnostics
+        let ros2DiagItem = NSMenuItem(title: "ROS2 Diagnostics", action: nil, keyEquivalent: "")
+        let ros2DiagMenu = NSMenu(title: "ROS2 Diagnostics")
+        ros2DiagMenu.addItem(withTitle: "Doctor Report", action: #selector(ros2Doctor(_:)), keyEquivalent: "")
+        ros2DiagMenu.addItem(withTitle: "Daemon Status", action: #selector(ros2DaemonStatus(_:)), keyEquivalent: "")
+        ros2DiagMenu.addItem(withTitle: "Multicast Test", action: #selector(ros2Multicast(_:)), keyEquivalent: "")
+        ros2DiagMenu.addItem(withTitle: "wtf (diagnostic dump)", action: #selector(ros2Wtf(_:)), keyEquivalent: "")
+        ros2DiagMenu.addItem(.separator())
+        ros2DiagMenu.addItem(withTitle: "Topic Hz /scan", action: #selector(ros2HzScan(_:)), keyEquivalent: "")
+        ros2DiagMenu.addItem(withTitle: "Topic Hz /camera/image_raw", action: #selector(ros2HzCamera(_:)), keyEquivalent: "")
+        ros2DiagMenu.addItem(withTitle: "Topic Delay /tf", action: #selector(ros2DelayTf(_:)), keyEquivalent: "")
+        ros2DiagItem.submenu = ros2DiagMenu
+        roboticsMenu.addItem(ros2DiagItem)
+
+        // ROS2 Transforms
+        let ros2TfItem = NSMenuItem(title: "ROS2 Transforms", action: nil, keyEquivalent: "")
+        let ros2TfMenu = NSMenu(title: "ROS2 Transforms")
+        ros2TfMenu.addItem(withTitle: "TF Tree (view_frames)", action: #selector(ros2TfTree(_:)), keyEquivalent: "")
+        ros2TfMenu.addItem(withTitle: "TF Echo base_link → map", action: #selector(ros2TfEcho(_:)), keyEquivalent: "")
+        ros2TfMenu.addItem(withTitle: "TF Monitor", action: #selector(ros2TfMonitor(_:)), keyEquivalent: "")
+        ros2TfItem.submenu = ros2TfMenu
+        roboticsMenu.addItem(ros2TfItem)
         roboticsMenu.addItem(.separator())
 
-        // Quick commands
-        let ros2LaunchItem = NSMenuItem(title: "Launch...", action: nil, keyEquivalent: "")
-        let launchSubmenu = NSMenu(title: "Launch")
-        launchSubmenu.addItem(withTitle: "ros2 launch", action: #selector(ros2Launch(_:)), keyEquivalent: "l")
-        launchSubmenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
-        launchSubmenu.addItem(withTitle: "ros2 bag record", action: #selector(ros2BagRecord(_:)), keyEquivalent: "")
-        launchSubmenu.addItem(withTitle: "ros2 bag play", action: #selector(ros2BagPlay(_:)), keyEquivalent: "")
-        ros2LaunchItem.submenu = launchSubmenu
-        roboticsMenu.addItem(ros2LaunchItem)
+        // Launch & Run
+        let launchItem = NSMenuItem(title: "Launch & Run", action: nil, keyEquivalent: "")
+        let launchMenu = NSMenu(title: "Launch & Run")
+        launchMenu.addItem(withTitle: "ros2 launch...", action: #selector(ros2Launch(_:)), keyEquivalent: "l")
+        launchMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
+        launchMenu.addItem(withTitle: "ros2 run...", action: #selector(ros2Run(_:)), keyEquivalent: "")
+        launchMenu.addItem(.separator())
+        launchMenu.addItem(withTitle: "colcon build", action: #selector(colconBuild(_:)), keyEquivalent: "b")
+        launchMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
+        launchMenu.addItem(withTitle: "colcon build --packages-select...", action: #selector(colconBuildSelect(_:)), keyEquivalent: "")
+        launchMenu.addItem(withTitle: "colcon test", action: #selector(colconTest(_:)), keyEquivalent: "")
+        launchItem.submenu = launchMenu
+        roboticsMenu.addItem(launchItem)
+
+        // Bag Recording
+        let bagItem = NSMenuItem(title: "Bag Recording", action: nil, keyEquivalent: "")
+        let bagMenu = NSMenu(title: "Bag Recording")
+        bagMenu.addItem(withTitle: "Record All Topics", action: #selector(ros2BagRecord(_:)), keyEquivalent: "")
+        bagMenu.addItem(withTitle: "Record Select Topics...", action: #selector(ros2BagRecordSelect(_:)), keyEquivalent: "")
+        bagMenu.addItem(withTitle: "Play Bag...", action: #selector(ros2BagPlay(_:)), keyEquivalent: "")
+        bagMenu.addItem(withTitle: "Bag Info...", action: #selector(ros2BagInfo(_:)), keyEquivalent: "")
+        bagItem.submenu = bagMenu
+        roboticsMenu.addItem(bagItem)
         roboticsMenu.addItem(.separator())
 
         // Simulation
         let simItem = NSMenuItem(title: "Simulation", action: nil, keyEquivalent: "")
-        let simSubmenu = NSMenu(title: "Simulation")
-        simSubmenu.addItem(withTitle: "Gazebo", action: #selector(launchGazebo(_:)), keyEquivalent: "")
-        simSubmenu.addItem(withTitle: "RViz2", action: #selector(launchRViz2(_:)), keyEquivalent: "")
-        simSubmenu.addItem(withTitle: "MuJoCo", action: #selector(launchMuJoCo(_:)), keyEquivalent: "")
-        simItem.submenu = simSubmenu
+        let simMenu = NSMenu(title: "Simulation")
+        simMenu.addItem(withTitle: "Gazebo Sim", action: #selector(launchGazebo(_:)), keyEquivalent: "")
+        simMenu.addItem(withTitle: "RViz2", action: #selector(launchRViz2(_:)), keyEquivalent: "")
+        simMenu.addItem(withTitle: "rqt", action: #selector(launchRqt(_:)), keyEquivalent: "")
+        simMenu.addItem(withTitle: "MuJoCo", action: #selector(launchMuJoCo(_:)), keyEquivalent: "")
+        simMenu.addItem(withTitle: "Isaac Sim", action: #selector(launchIsaacSim(_:)), keyEquivalent: "")
+        simItem.submenu = simMenu
         roboticsMenu.addItem(simItem)
         roboticsMenu.addItem(.separator())
 
-        // ANIMA section
-        let animaItem = NSMenuItem(title: "ANIMA", action: nil, keyEquivalent: "")
-        let animaSubmenu = NSMenu(title: "ANIMA")
-        animaSubmenu.addItem(withTitle: "Module Status", action: #selector(animaStatus(_:)), keyEquivalent: "")
-        animaSubmenu.addItem(withTitle: "docker compose up", action: #selector(animaComposeUp(_:)), keyEquivalent: "")
-        animaSubmenu.addItem(withTitle: "docker compose down", action: #selector(animaComposeDown(_:)), keyEquivalent: "")
-        animaSubmenu.addItem(.separator())
-        animaSubmenu.addItem(withTitle: "View Logs", action: #selector(animaLogs(_:)), keyEquivalent: "")
-        animaItem.submenu = animaSubmenu
+        // Docker
+        let dockerItem = NSMenuItem(title: "Docker", action: nil, keyEquivalent: "")
+        let dockerMenu = NSMenu(title: "Docker")
+        dockerMenu.addItem(withTitle: "docker compose ps", action: #selector(dockerPs(_:)), keyEquivalent: "")
+        dockerMenu.addItem(withTitle: "docker compose up -d", action: #selector(animaComposeUp(_:)), keyEquivalent: "")
+        dockerMenu.addItem(withTitle: "docker compose down", action: #selector(animaComposeDown(_:)), keyEquivalent: "")
+        dockerMenu.addItem(withTitle: "docker compose logs -f", action: #selector(animaLogs(_:)), keyEquivalent: "")
+        dockerMenu.addItem(.separator())
+        dockerMenu.addItem(withTitle: "docker ps", action: #selector(dockerPsAll(_:)), keyEquivalent: "")
+        dockerMenu.addItem(withTitle: "docker images", action: #selector(dockerImages(_:)), keyEquivalent: "")
+        dockerItem.submenu = dockerMenu
+        roboticsMenu.addItem(dockerItem)
+
+        // ANIMA
+        let animaItem = NSMenuItem(title: "ANIMA Suite", action: nil, keyEquivalent: "")
+        let animaMenu = NSMenu(title: "ANIMA Suite")
+        animaMenu.addItem(withTitle: "Module Status", action: #selector(animaStatus(_:)), keyEquivalent: "")
+        animaMenu.addItem(withTitle: "ANIMA Compile", action: #selector(animaCompile(_:)), keyEquivalent: "")
+        animaMenu.addItem(withTitle: "ANIMA Plug", action: #selector(animaPlug(_:)), keyEquivalent: "")
+        animaItem.submenu = animaMenu
         roboticsMenu.addItem(animaItem)
         roboticsMenu.addItem(.separator())
 
         // Hardware
         let hwItem = NSMenuItem(title: "Hardware", action: nil, keyEquivalent: "")
-        let hwSubmenu = NSMenu(title: "Hardware")
-        hwSubmenu.addItem(withTitle: "Camera Status", action: #selector(hwCamera(_:)), keyEquivalent: "")
-        hwSubmenu.addItem(withTitle: "LiDAR Status", action: #selector(hwLidar(_:)), keyEquivalent: "")
-        hwSubmenu.addItem(withTitle: "SSH to Robot...", action: #selector(hwSSH(_:)), keyEquivalent: "")
-        hwItem.submenu = hwSubmenu
+        let hwMenu = NSMenu(title: "Hardware")
+        hwMenu.addItem(withTitle: "Camera Status", action: #selector(hwCamera(_:)), keyEquivalent: "")
+        hwMenu.addItem(withTitle: "LiDAR Status", action: #selector(hwLidar(_:)), keyEquivalent: "")
+        hwMenu.addItem(withTitle: "IMU Status", action: #selector(hwImu(_:)), keyEquivalent: "")
+        hwMenu.addItem(withTitle: "Joy/Gamepad", action: #selector(hwJoy(_:)), keyEquivalent: "")
+        hwMenu.addItem(.separator())
+        hwMenu.addItem(withTitle: "USB Devices (system_profiler)", action: #selector(hwUsb(_:)), keyEquivalent: "")
+        hwMenu.addItem(withTitle: "Serial Ports", action: #selector(hwSerial(_:)), keyEquivalent: "")
+        hwMenu.addItem(.separator())
+        hwMenu.addItem(withTitle: "SSH to Robot...", action: #selector(hwSSH(_:)), keyEquivalent: "")
+        hwItem.submenu = hwMenu
         roboticsMenu.addItem(hwItem)
 
         let roboticsMenuItem = NSMenuItem()
@@ -288,21 +353,69 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
+    // ROS2 Introspection
     @objc private func ros2NodeList(_ sender: Any?) { runCommandInNewTab("ros2 node list") }
-    @objc private func ros2TopicList(_ sender: Any?) { runCommandInNewTab("ros2 topic list") }
+    @objc private func ros2TopicList(_ sender: Any?) { runCommandInNewTab("ros2 topic list -v") }
     @objc private func ros2ServiceList(_ sender: Any?) { runCommandInNewTab("ros2 service list") }
+    @objc private func ros2ActionList(_ sender: Any?) { runCommandInNewTab("ros2 action list -t") }
+    @objc private func ros2ParamList(_ sender: Any?) { runCommandInNewTab("ros2 param list") }
+    @objc private func ros2InterfaceList(_ sender: Any?) { runCommandInNewTab("ros2 interface list") }
+    @objc private func ros2Graph(_ sender: Any?) { runCommandInNewTab("rqt_graph") }
+
+    // ROS2 Diagnostics
+    @objc private func ros2Doctor(_ sender: Any?) { runCommandInNewTab("ros2 doctor --report") }
+    @objc private func ros2DaemonStatus(_ sender: Any?) { runCommandInNewTab("ros2 daemon status") }
+    @objc private func ros2Multicast(_ sender: Any?) { runCommandInNewTab("ros2 multicast receive") }
+    @objc private func ros2Wtf(_ sender: Any?) { runCommandInNewTab("ros2 wtf") }
+    @objc private func ros2HzScan(_ sender: Any?) { runCommandInNewTab("ros2 topic hz /scan") }
+    @objc private func ros2HzCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic hz /camera/image_raw") }
+    @objc private func ros2DelayTf(_ sender: Any?) { runCommandInNewTab("ros2 topic delay /tf") }
+
+    // ROS2 Transforms
+    @objc private func ros2TfTree(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_tools view_frames") }
+    @objc private func ros2TfEcho(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_ros tf2_echo base_link map") }
+    @objc private func ros2TfMonitor(_ sender: Any?) { runCommandInNewTab("ros2 run tf2_ros tf2_monitor") }
+
+    // Launch & Build
     @objc private func ros2Launch(_ sender: Any?) { runCommandInNewTab("ros2 launch ") }
+    @objc private func ros2Run(_ sender: Any?) { runCommandInNewTab("ros2 run ") }
+    @objc private func colconBuild(_ sender: Any?) { runCommandInNewTab("colcon build --symlink-install") }
+    @objc private func colconBuildSelect(_ sender: Any?) { runCommandInNewTab("colcon build --packages-select ") }
+    @objc private func colconTest(_ sender: Any?) { runCommandInNewTab("colcon test") }
+
+    // Bag Recording
     @objc private func ros2BagRecord(_ sender: Any?) { runCommandInNewTab("ros2 bag record -a") }
+    @objc private func ros2BagRecordSelect(_ sender: Any?) { runCommandInNewTab("ros2 bag record ") }
     @objc private func ros2BagPlay(_ sender: Any?) { runCommandInNewTab("ros2 bag play ") }
+    @objc private func ros2BagInfo(_ sender: Any?) { runCommandInNewTab("ros2 bag info ") }
+
+    // Simulation
     @objc private func launchGazebo(_ sender: Any?) { runCommandInNewTab("gz sim") }
     @objc private func launchRViz2(_ sender: Any?) { runCommandInNewTab("rviz2") }
+    @objc private func launchRqt(_ sender: Any?) { runCommandInNewTab("rqt") }
     @objc private func launchMuJoCo(_ sender: Any?) { runCommandInNewTab("python3 -m mujoco.viewer") }
-    @objc private func animaStatus(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
+    @objc private func launchIsaacSim(_ sender: Any?) { runCommandInNewTab("isaac-sim") }
+
+    // Docker
+    @objc private func dockerPs(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
     @objc private func animaComposeUp(_ sender: Any?) { runCommandInNewTab("docker compose up -d") }
     @objc private func animaComposeDown(_ sender: Any?) { runCommandInNewTab("docker compose down") }
     @objc private func animaLogs(_ sender: Any?) { runCommandInNewTab("docker compose logs -f --tail=50") }
+    @objc private func dockerPsAll(_ sender: Any?) { runCommandInNewTab("docker ps -a") }
+    @objc private func dockerImages(_ sender: Any?) { runCommandInNewTab("docker images") }
+
+    // ANIMA
+    @objc private func animaStatus(_ sender: Any?) { runCommandInNewTab("docker compose ps") }
+    @objc private func animaCompile(_ sender: Any?) { runCommandInNewTab("anima compile") }
+    @objc private func animaPlug(_ sender: Any?) { runCommandInNewTab("anima plug") }
+
+    // Hardware
     @objc private func hwCamera(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /camera/image_raw --once") }
     @objc private func hwLidar(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /scan --once") }
+    @objc private func hwImu(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /imu/data --once") }
+    @objc private func hwJoy(_ sender: Any?) { runCommandInNewTab("ros2 topic echo /joy --once") }
+    @objc private func hwUsb(_ sender: Any?) { runCommandInNewTab("system_profiler SPUSBDataType") }
+    @objc private func hwSerial(_ sender: Any?) { runCommandInNewTab("ls -la /dev/tty.* /dev/cu.*") }
     @objc private func hwSSH(_ sender: Any?) { runCommandInNewTab("ssh ") }
 }
 

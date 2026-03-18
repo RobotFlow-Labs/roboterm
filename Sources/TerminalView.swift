@@ -278,17 +278,120 @@ class TerminalView: NSView, NSTextInputClient {
     }
 
     override func rightMouseDown(with event: NSEvent) {
-        guard let surface else { return }
-        let pos = convert(event.locationInWindow, from: nil)
-        ghostty_surface_mouse_pos(surface, pos.x, pos.y, modsFromEvent(event))
-        ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_PRESS, GHOSTTY_MOUSE_RIGHT, modsFromEvent(event))
+        let menu = NSMenu()
+
+        // Clipboard
+        menu.addItem(withTitle: "Copy", action: #selector(copySelection(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Paste", action: #selector(pasteClipboard(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+
+        // Splits
+        menu.addItem(withTitle: "Split Right", action: #selector(ctxSplitRight(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Split Left", action: #selector(ctxSplitLeft(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Split Down", action: #selector(ctxSplitDown(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Split Up", action: #selector(ctxSplitUp(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+
+        // Terminal controls
+        menu.addItem(withTitle: "Reset Terminal", action: #selector(clearTerminal(_:)), keyEquivalent: "")
+        menu.addItem(withTitle: "Select All", action: #selector(selectAllText(_:)), keyEquivalent: "")
+        menu.addItem(.separator())
+
+        // ROS2 quick actions
+        let ros2Item = NSMenuItem(title: "ROS2", action: nil, keyEquivalent: "")
+        let ros2Menu = NSMenu(title: "ROS2")
+        ros2Menu.addItem(withTitle: "Node List", action: #selector(ctxRos2Nodes(_:)), keyEquivalent: "")
+        ros2Menu.addItem(withTitle: "Topic List", action: #selector(ctxRos2Topics(_:)), keyEquivalent: "")
+        ros2Menu.addItem(withTitle: "Service List", action: #selector(ctxRos2Services(_:)), keyEquivalent: "")
+        ros2Menu.addItem(withTitle: "Doctor Report", action: #selector(ctxRos2Doctor(_:)), keyEquivalent: "")
+        ros2Menu.addItem(.separator())
+        ros2Menu.addItem(withTitle: "TF Tree", action: #selector(ctxRos2TfTree(_:)), keyEquivalent: "")
+        ros2Menu.addItem(withTitle: "Topic Hz /scan", action: #selector(ctxRos2HzScan(_:)), keyEquivalent: "")
+        ros2Item.submenu = ros2Menu
+        menu.addItem(ros2Item)
+
+        // Agent launch
+        let agentItem = NSMenuItem(title: "Launch Agent", action: nil, keyEquivalent: "")
+        let agentMenu = NSMenu(title: "Launch Agent")
+        agentMenu.addItem(withTitle: "Claude Code", action: #selector(ctxLaunchClaude(_:)), keyEquivalent: "")
+        agentMenu.addItem(withTitle: "Codex", action: #selector(ctxLaunchCodex(_:)), keyEquivalent: "")
+        agentItem.submenu = agentMenu
+        menu.addItem(agentItem)
+
+        NSMenu.popUpContextMenu(menu, with: event, for: self)
     }
 
     override func rightMouseUp(with event: NSEvent) {
+        // Context menu handled in rightMouseDown
+    }
+
+    // MARK: - Context menu actions
+
+    @objc private func copySelection(_ sender: Any?) {
         guard let surface else { return }
-        let pos = convert(event.locationInWindow, from: nil)
-        ghostty_surface_mouse_pos(surface, pos.x, pos.y, modsFromEvent(event))
-        ghostty_surface_mouse_button(surface, GHOSTTY_MOUSE_RELEASE, GHOSTTY_MOUSE_RIGHT, modsFromEvent(event))
+        // Trigger Ghostty's copy action
+        let copyCmd = "copy:clipboard"
+        copyCmd.withCString { ptr in
+            ghostty_surface_binding_action(surface, ptr, UInt(copyCmd.utf8.count))
+        }
+    }
+
+    @objc private func pasteClipboard(_ sender: Any?) {
+        guard let surface else { return }
+        if let content = NSPasteboard.general.string(forType: .string) {
+            content.withCString { ptr in
+                ghostty_surface_text(surface, ptr, UInt(content.utf8.count))
+            }
+        }
+    }
+
+    @objc private func selectAllText(_ sender: Any?) {
+        guard let surface else { return }
+        let cmd = "select_all"
+        cmd.withCString { ptr in
+            ghostty_surface_binding_action(surface, ptr, UInt(cmd.utf8.count))
+        }
+    }
+
+    @objc private func clearTerminal(_ sender: Any?) {
+        guard let surface else { return }
+        let clear = "clear\n"
+        clear.withCString { ptr in
+            ghostty_surface_text(surface, ptr, UInt(clear.utf8.count))
+        }
+    }
+
+    private func sendCommandInTerminal(_ command: String) {
+        guard let surface else { return }
+        let cmd = command + "\n"
+        cmd.withCString { ptr in
+            ghostty_surface_text(surface, ptr, UInt(cmd.utf8.count))
+        }
+    }
+
+    @objc private func ctxRos2Nodes(_ sender: Any?) { sendCommandInTerminal("ros2 node list") }
+    @objc private func ctxRos2Topics(_ sender: Any?) { sendCommandInTerminal("ros2 topic list") }
+    @objc private func ctxRos2Services(_ sender: Any?) { sendCommandInTerminal("ros2 service list") }
+    @objc private func ctxRos2Doctor(_ sender: Any?) { sendCommandInTerminal("ros2 doctor --report") }
+    @objc private func ctxRos2TfTree(_ sender: Any?) { sendCommandInTerminal("ros2 run tf2_tools view_frames") }
+    @objc private func ctxRos2HzScan(_ sender: Any?) { sendCommandInTerminal("ros2 topic hz /scan") }
+    @objc private func ctxLaunchClaude(_ sender: Any?) { sendCommandInTerminal("claude") }
+    @objc private func ctxLaunchCodex(_ sender: Any?) { sendCommandInTerminal("codex") }
+
+    // Split actions — delegate to AppDelegate
+    @objc private func ctxSplitRight(_ sender: Any?) { splitFromContext(direction: .horizontal) }
+    @objc private func ctxSplitLeft(_ sender: Any?) { splitFromContext(direction: .horizontal) }
+    @objc private func ctxSplitDown(_ sender: Any?) { splitFromContext(direction: .vertical) }
+    @objc private func ctxSplitUp(_ sender: Any?) { splitFromContext(direction: .vertical) }
+
+    private func splitFromContext(direction: SplitNode.SplitDirection) {
+        guard let appDelegate = AppDelegate.shared else { return }
+        for mgr in appDelegate.tabManagers {
+            for ws in mgr.workspaces where ws.tabs.contains(where: { $0.id == tabId }) {
+                ws.createSplitTab(nextTo: tabId, direction: direction)
+                return
+            }
+        }
     }
 
     override func scrollWheel(with event: NSEvent) {
