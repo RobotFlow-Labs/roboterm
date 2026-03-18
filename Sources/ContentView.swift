@@ -231,6 +231,7 @@ struct WorkspaceItemView: View {
     @State private var isHovering = false
     @State private var isEditing = false
     @State private var editText = ""
+    @FocusState private var isTextFieldFocused: Bool
 
     /// The selected tab's title, used for the subtitle line.
     private var activeTabTitle: String {
@@ -258,10 +259,12 @@ struct WorkspaceItemView: View {
             VStack(alignment: .leading, spacing: 3) {
                 if isEditing {
                     TextField("Name", text: $editText)
+                        .focused($isTextFieldFocused)
                         .onSubmit {
                             let trimmed = editText.trimmingCharacters(in: .whitespaces)
                             workspace.customName = trimmed.isEmpty ? nil : trimmed
                             isEditing = false
+                            isTextFieldFocused = false
                         }
                     .textFieldStyle(.plain)
                     .font(.system(size: 12, weight: .bold, design: .monospaced))
@@ -328,14 +331,22 @@ struct WorkspaceItemView: View {
         .onTapGesture(count: 2) {
             editText = workspace.customName ?? workspace.displayName
             isEditing = true
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isTextFieldFocused = true }
         }
         .onTapGesture(count: 1) {
             if !isEditing { onSelect() }
+        }
+        .onChange(of: isTextFieldFocused) { focused in
+            if !focused && isEditing {
+                // Lost focus = cancel editing
+                isEditing = false
+            }
         }
         .contextMenu {
             Button("Rename Workspace") {
                 editText = workspace.customName ?? workspace.displayName
                 isEditing = true
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { isTextFieldFocused = true }
             }
             Divider()
             Button("Close Workspace") { onClose() }
