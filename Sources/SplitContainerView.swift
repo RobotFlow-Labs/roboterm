@@ -31,7 +31,7 @@ class SplitContainerView: NSView {
         })
 
         // Remove stale terminal views
-        for subview in subviews where subview is TerminalView {
+        for subview in subviews where subview is RobotermTerminal {
             if !activeViews.contains(ObjectIdentifier(subview)) {
                 subview.removeFromSuperview()
             }
@@ -48,7 +48,7 @@ class SplitContainerView: NSView {
         layoutNode(layout, in: bounds)
     }
 
-    private func adoptTerminalView(_ terminalView: TerminalView, in rect: NSRect) {
+    private func adoptRobotermTerminal(_ terminalView: RobotermTerminal, in rect: NSRect) {
         let needsReparent = terminalView.superview !== self
         if needsReparent {
             // Remove from old parent, clearing any auto-layout constraints
@@ -58,15 +58,8 @@ class SplitContainerView: NSView {
         }
         terminalView.frame = rect
         terminalView.isHidden = false
-
-        if terminalView.surface == nil, window != nil {
-            terminalView.createSurface()
-        }
-        terminalView.updateSurfaceSize()
-
-        if let surface = terminalView.surface {
-            ghostty_surface_refresh(surface)
-        }
+        // SwiftTerm automatically recalculates terminal size on setFrameSize —
+        // no manual surface size update or refresh call needed.
         terminalView.needsDisplay = true
     }
 
@@ -74,8 +67,8 @@ class SplitContainerView: NSView {
         switch node.content {
         case .tab(let tabId):
             guard let tab = tabLookup?(tabId) else { return }
-            let terminalView = tab.makeTerminalView(frame: rect)
-            adoptTerminalView(terminalView, in: rect)
+            let terminalView = tab.makeRobotermTerminal(frame: rect)
+            adoptRobotermTerminal(terminalView, in: rect)
 
         case .split(let direction, let first, let second, let ratio):
             let visualThickness: CGFloat = 1

@@ -6,7 +6,7 @@ struct RobotermApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     init() {
-        Self.configureGhosttyEnvironment()
+        Self.configureEnvironment()
     }
 
     var body: some Scene {
@@ -15,38 +15,24 @@ struct RobotermApp: App {
         Settings { EmptyView() }
     }
 
-    /// Set up environment variables needed by libghostty before initialization.
-    private static func configureGhosttyEnvironment() {
-        let fm = FileManager.default
-
-        // GHOSTTY_RESOURCES_DIR: look in bundle first, then system Ghostty.app
-        if getenv("GHOSTTY_RESOURCES_DIR") == nil {
-            let bundled = Bundle.main.resourceURL?.appendingPathComponent("ghostty")
-            let system = "/Applications/Ghostty.app/Contents/Resources/ghostty"
-
-            if let bundled, fm.fileExists(atPath: bundled.path) {
-                setenv("GHOSTTY_RESOURCES_DIR", bundled.path, 1)
-            } else if fm.fileExists(atPath: system) {
-                setenv("GHOSTTY_RESOURCES_DIR", system, 1)
-            }
-        }
-
+    /// Set up process-level environment variables that shells and ROBOTERM tools expect.
+    private static func configureEnvironment() {
+        // Use xterm-256color — SwiftTerm is fully compatible.
         if getenv("TERM") == nil {
-            setenv("TERM", "xterm-ghostty", 1)
+            setenv("TERM", "xterm-256color", 1)
         }
 
         if getenv("TERM_PROGRAM") == nil {
             setenv("TERM_PROGRAM", "roboterm", 1)
         }
 
-        // Set ROBOTERM env var so shells can auto-source tools
+        // Let shells know they're running inside ROBOTERM.
         setenv("ROBOTERM", "1", 1)
 
-        // Point to the tools script for auto-sourcing
+        // Point to the tools script for auto-sourcing in shell profiles.
         if let toolsPath = Bundle.main.path(forResource: "roboterm-tools", ofType: "sh") {
             setenv("ROBOTERM_TOOLS", toolsPath, 1)
         } else {
-            // Fallback: check common locations
             let paths = [
                 "/Applications/ROBOTERM.app/Contents/Resources/roboterm-tools.sh",
                 Bundle.main.bundlePath + "/Contents/Resources/scripts/roboterm-tools.sh",

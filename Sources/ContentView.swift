@@ -283,7 +283,7 @@ struct WorkspaceItemView: View {
 struct TabBar: View {
     @ObservedObject var tabManager: TabManager
 
-    private var bgColor: Color { Color(nsColor: GhosttyManager.shared.backgroundColor) }
+    private var bgColor: Color { Color(nsColor: TerminalSettings.shared.backgroundColor) }
 
     var body: some View {
         ZStack {
@@ -673,10 +673,9 @@ struct TerminalContainerView: NSViewRepresentable {
             splitContainer.isHidden = false
             splitContainer.update(with: layout, tabLookup: tabLookup)
 
-            // Refresh visible surfaces
+            // Trigger redisplay for all visible panes.
             for tabId in layout.allTabIds {
-                if let tab = tabLookup(tabId), let tv = tab.terminalView, let surface = tv.surface {
-                    ghostty_surface_refresh(surface)
+                if let tab = tabLookup(tabId), let tv = tab.terminalView {
                     tv.needsDisplay = true
                 }
             }
@@ -686,7 +685,7 @@ struct TerminalContainerView: NSViewRepresentable {
                 subview.isHidden = true
             }
 
-            let terminalView = selectedTab.makeTerminalView(frame: container.bounds)
+            let terminalView = selectedTab.makeRobotermTerminal(frame: container.bounds)
 
             if terminalView.superview is SplitContainerView {
                 // Move out of the split container back to the main container
@@ -704,14 +703,11 @@ struct TerminalContainerView: NSViewRepresentable {
             }
 
             // Hide other direct terminal views
-            for subview in container.subviews where subview is TerminalView {
+            for subview in container.subviews where subview is RobotermTerminal {
                 subview.isHidden = (subview !== terminalView)
             }
             terminalView.isHidden = false
 
-            if let surface = terminalView.surface {
-                ghostty_surface_refresh(surface)
-            }
             terminalView.needsDisplay = true
 
             DispatchQueue.main.async {

@@ -6,9 +6,13 @@ options:
   xcodeVersion: "15.0"
   minimumXcodeGenVersion: "2.38.0"
 
+packages:
+  SwiftTerm:
+    url: https://github.com/migueldeicaza/SwiftTerm.git
+    from: 1.2.5
+
 settings:
   base:
-    SWIFT_OBJC_BRIDGING_HEADER: roboterm-Bridging-Header.h
     MACOSX_DEPLOYMENT_TARGET: "13.0"
     SWIFT_VERSION: "5.9"
     CODE_SIGN_ENTITLEMENTS: roboterm.entitlements
@@ -33,18 +37,7 @@ targets:
         GENERATE_INFOPLIST_FILE: false
         CODE_SIGN_IDENTITY: "-"
         CODE_SIGN_STYLE: Manual
-        FRAMEWORK_SEARCH_PATHS:
-          - "$(PROJECT_DIR)/ghostty/macos"
-        HEADER_SEARCH_PATHS:
-          - "$(PROJECT_DIR)"
         OTHER_LDFLAGS:
-          - "-lc++"
-          - "-framework"
-          - Metal
-          - "-framework"
-          - QuartzCore
-          - "-framework"
-          - IOSurface
           - "-framework"
           - UniformTypeIdentifiers
           - "-framework"
@@ -52,5 +45,5 @@ targets:
           - "-framework"
           - IOKit
     dependencies:
-      - framework: ghostty/macos/GhosttyKit.xcframework
-        embed: false
+      - package: SwiftTerm
+        product: SwiftTerm

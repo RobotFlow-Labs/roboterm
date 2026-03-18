@@ -17,7 +17,7 @@ final class Tab: Identifiable, ObservableObject {
     var initialWorkingDirectory: String?
 
     /// The terminal view is created lazily when the tab becomes visible.
-    private(set) var terminalView: TerminalView?
+    private(set) var terminalView: RobotermTerminal?
 
     init(id: UUID = UUID(), title: String = "Terminal", workingDirectory: String? = nil) {
         self.id = id
@@ -26,9 +26,9 @@ final class Tab: Identifiable, ObservableObject {
     }
 
     /// Creates and returns the terminal NSView for embedding in the window.
-    func makeTerminalView(frame: NSRect) -> TerminalView {
+    func makeRobotermTerminal(frame: NSRect) -> RobotermTerminal {
         if let existing = terminalView { return existing }
-        let view = TerminalView(frame: frame, tabId: id, workingDirectory: initialWorkingDirectory)
+        let view = RobotermTerminal(frame: frame, tabId: id, workingDirectory: initialWorkingDirectory)
         terminalView = view
         return view
     }

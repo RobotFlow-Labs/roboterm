@@ -84,21 +84,12 @@ struct AgentBar: View {
             guard let ws = tabManager.selectedWorkspace else { return }
             let tab = ws.createTab()
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                if let surface = tab.terminalView?.surface {
-                    let cmd = command + "\n"
-                    cmd.withCString { ptr in
-                        ghostty_surface_text(surface, ptr, UInt(cmd.utf8.count))
-                    }
-                }
+                tab.terminalView?.sendText(command + "\n")
             }
         } else {
             // Run in current tab
-            guard let tab = tabManager.selectedTab,
-                  let surface = tab.terminalView?.surface else { return }
-            let cmd = command + "\n"
-            cmd.withCString { ptr in
-                ghostty_surface_text(surface, ptr, UInt(cmd.utf8.count))
-            }
+            guard let tab = tabManager.selectedTab else { return }
+            tab.terminalView?.sendText(command + "\n")
         }
     }
 }

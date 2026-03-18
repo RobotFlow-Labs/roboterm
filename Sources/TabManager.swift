@@ -41,7 +41,7 @@ final class TabManager: ObservableObject {
             forName: .terminalViewDidFocus, object: nil, queue: .main
         ) { [weak self] notification in
             MainActor.assumeIsolated {
-                guard let self, let view = notification.object as? TerminalView else { return }
+                guard let self, let view = notification.object as? RobotermTerminal else { return }
                 let tabId = view.tabId
                 // Find the workspace containing this tab and update selection
                 for ws in self.workspaces {

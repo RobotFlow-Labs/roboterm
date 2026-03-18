@@ -17,8 +17,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         Self.shared = self
 
-        // Force Ghostty initialization
-        _ = GhosttyManager.shared
+        // Initialize terminal settings singleton
+        _ = TerminalSettings.shared
 
         // Try to restore a previous session
         var restored = false
@@ -68,8 +68,8 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.titleVisibility = .hidden
         window.titlebarSeparatorStyle = .none
         window.title = "ROBOTERM"
-        window.backgroundColor = GhosttyManager.shared.backgroundColor
-        window.isOpaque = GhosttyManager.shared.backgroundOpacity >= 1.0
+        window.backgroundColor = TerminalSettings.shared.backgroundColor
+        window.isOpaque = TerminalSettings.shared.backgroundOpacity >= 1.0
         window.delegate = self
         window.makeKeyAndOrderFront(nil)
         window.zoom(nil)
@@ -344,24 +344,15 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         guard let mgr = focusedTabManager else { return }
         let tab = mgr.createTab()
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            if let surface = tab.terminalView?.surface {
-                let cmd = command + "\n"
-                cmd.withCString { ptr in
-                    ghostty_surface_text(surface, ptr, UInt(cmd.utf8.count))
-                }
-            }
+            tab.terminalView?.sendText(command + "\n")
         }
     }
 
     /// Run a command in the current tab (for quick queries).
     private func runCommand(_ command: String) {
         guard let mgr = focusedTabManager,
-              let tab = mgr.selectedTab,
-              let surface = tab.terminalView?.surface else { return }
-        let cmd = command + "\n"
-        cmd.withCString { ptr in
-            ghostty_surface_text(surface, ptr, UInt(cmd.utf8.count))
-        }
+              let tab = mgr.selectedTab else { return }
+        tab.terminalView?.sendText(command + "\n")
     }
 
     // ROS2 Introspection — run in current tab (quick queries)

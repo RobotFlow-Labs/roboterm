@@ -31,12 +31,9 @@ final class ScriptTerminal: NSObject {
         tab?.currentDirectory ?? tab?.initialWorkingDirectory ?? ""
     }
 
-    /// Send text to the terminal surface (used by AppleScript `input text`).
+    /// Send text to the terminal (used by AppleScript `input text`).
     func sendText(_ text: String) {
-        guard let surface = tab?.terminalView?.surface else { return }
-        text.withCString { ptr in
-            ghostty_surface_text(surface, ptr, UInt(text.utf8.count))
-        }
+        tab?.terminalView?.sendText(text)
     }
 
     /// Handler for `split <terminal> direction <dir>`.
