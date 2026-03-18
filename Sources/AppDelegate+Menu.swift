@@ -7,7 +7,7 @@ extension AppDelegate {
     func buildMainMenu() -> NSMenu {
         let mainMenu = NSMenu()
 
-        // App menu
+        // 1. App menu (ROBOTERM)
         let appMenu = NSMenu()
         appMenu.addItem(withTitle: "About ROBOTERM", action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)), keyEquivalent: "")
         appMenu.addItem(.separator())
@@ -18,7 +18,7 @@ extension AppDelegate {
         appMenuItem.submenu = appMenu
         mainMenu.addItem(appMenuItem)
 
-        // File menu
+        // 2. File menu
         let fileMenu = NSMenu(title: "File")
         fileMenu.addItem(withTitle: "New Window", action: #selector(newWindow(_:)), keyEquivalent: "n")
         fileMenu.addItem(withTitle: "New Tab", action: #selector(newTab(_:)), keyEquivalent: "t")
@@ -36,7 +36,16 @@ extension AppDelegate {
         fileMenuItem.submenu = fileMenu
         mainMenu.addItem(fileMenuItem)
 
-        // View menu (splits)
+        // 3. Edit menu
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        let editMenuItem = NSMenuItem()
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+
+        // 4. View menu
         let viewMenu = NSMenu(title: "View")
         viewMenu.addItem(withTitle: "Toggle Sidebar", action: #selector(toggleSidebar(_:)), keyEquivalent: "\\")
         viewMenu.addItem(.separator())
@@ -61,7 +70,10 @@ extension AppDelegate {
         viewMenuItem.submenu = viewMenu
         mainMenu.addItem(viewMenuItem)
 
-        // Window menu
+        // 5. Robotics menu (custom — before Window)
+        mainMenu.addItem(buildRoboticsMenuItem())
+
+        // 6. Window menu (macOS positions this near the end automatically)
         let windowMenu = NSMenu(title: "Window")
         windowMenu.addItem(withTitle: "Next Tab", action: #selector(nextTab(_:)), keyEquivalent: "}")
         windowMenu.items.last?.keyEquivalentModifierMask = [.command, .shift]
@@ -77,18 +89,6 @@ extension AppDelegate {
         let windowMenuItem = NSMenuItem()
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)
-
-        // Edit menu (for Copy/Paste to work)
-        let editMenu = NSMenu(title: "Edit")
-        editMenu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-        editMenu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "v")
-        editMenu.addItem(withTitle: "Select All", action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
-        let editMenuItem = NSMenuItem()
-        editMenuItem.submenu = editMenu
-        mainMenu.addItem(editMenuItem)
-
-        // Robotics menu
-        mainMenu.addItem(buildRoboticsMenuItem())
 
         return mainMenu
     }
