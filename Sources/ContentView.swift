@@ -114,18 +114,77 @@ struct WorkspaceSidebar: View {
 
             Spacer()
 
-            // Bottom: system status
+            // Hardware section
             Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
                 .padding(.horizontal, 8)
-            HStack(spacing: 4) {
-                Circle().fill(rfGreen).frame(width: 5, height: 5)
-                Text("SYSTEM: ONLINE")
-                    .font(.system(size: 8, weight: .medium, design: .monospaced))
-                    .foregroundColor(rfGreen.opacity(0.6))
-                    .tracking(0.5)
+
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
+                HStack {
+                    Text("HARDWARE")
+                        .font(.system(size: 9, weight: .bold, design: .monospaced))
+                        .foregroundColor(rfAccent.opacity(0.6))
+                        .tracking(1.5)
+                    Spacer()
+                    Button(action: { HardwareState.shared.scan() }) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 8))
+                            .foregroundColor(.white.opacity(0.25))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, 12)
+                .padding(.top, 6)
+                .padding(.bottom, 4)
+
+                // Device list
+                ForEach(HardwareState.shared.devices) { device in
+                    HStack(spacing: 5) {
+                        Circle()
+                            .fill(device.status == .connected ? rfGreen : Color.white.opacity(0.2))
+                            .frame(width: 5, height: 5)
+                        Text(device.name.uppercased())
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(device.status == .connected ? .white.opacity(0.5) : .white.opacity(0.2))
+                            .lineLimit(1)
+                        Spacer()
+                        Text(device.type == .camera ? "CAM" :
+                             device.type == .compute ? "SBC" :
+                             device.type == .lidar ? "LDR" :
+                             device.type == .serial ? "USB" : "DEV")
+                            .font(.system(size: 7, weight: .medium, design: .monospaced))
+                            .foregroundColor(device.status == .connected ?
+                                (device.type == .camera ? Color(red: 0, green: 0.87, blue: 1) :
+                                 device.type == .compute ? rfGreen : rfAccent).opacity(0.5) :
+                                Color.white.opacity(0.15))
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 2)
+                }
+
+                // System status
+                Rectangle().fill(rfAccent.opacity(0.1)).frame(height: 1)
+                    .padding(.horizontal, 8)
+                    .padding(.top, 4)
+
+                let connectedCount = HardwareState.shared.devices.filter { $0.status == .connected }.count
+                let totalCount = HardwareState.shared.devices.count
+                HStack(spacing: 4) {
+                    Circle().fill(connectedCount > 0 ? rfGreen : Color.white.opacity(0.2)).frame(width: 5, height: 5)
+                    Text(connectedCount > 0 ? "SYSTEM: ONLINE" : "SYSTEM: IDLE")
+                        .font(.system(size: 8, weight: .medium, design: .monospaced))
+                        .foregroundColor(connectedCount > 0 ? rfGreen.opacity(0.6) : Color.white.opacity(0.3))
+                        .tracking(0.5)
+                    Spacer()
+                    if totalCount > 0 {
+                        Text("\(connectedCount)/\(totalCount)")
+                            .font(.system(size: 8, weight: .bold, design: .monospaced))
+                            .foregroundColor(rfAccent.opacity(0.4))
+                    }
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
         }
         .background(sidebarBg)
     }
