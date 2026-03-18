@@ -75,14 +75,14 @@ struct WorkspaceSidebar: View {
             // Header
             HStack {
                 Text("WORKSPACES")
-                    .font(.system(size: 9, weight: .bold, design: .monospaced))
-                    .foregroundColor(rfAccent.opacity(0.6))
-                    .tracking(1.5)
+                    .font(.system(size: 12, weight: .black, design: .monospaced))
+                    .foregroundColor(rfAccent)
+                    .tracking(2)
                 Spacer()
             }
             .padding(.horizontal, 12)
-            .padding(.top, 10)
-            .padding(.bottom, 6)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
 
             // + Workspace button
             WorkspaceAddButton(tabManager: tabManager)
