@@ -693,6 +693,168 @@ rt-info() {
 }
 
 # ============================================================
+# rt profile — Environment profiles (dev/sim/hardware)
+# ============================================================
+rt-profile() {
+    local profiles_dir="$HOME/.config/roboterm/profiles"
+
+    local cmd="${1:-list}"
+    case "$cmd" in
+        list)
+            _rt_header "Profiles"
+            echo ""
+            if [ -d "$profiles_dir" ]; then
+                for f in "$profiles_dir"/*.env; do
+                    [ -f "$f" ] || continue
+                    local name=$(basename "$f" .env)
+                    _rt_info "$name"
+                done
+            else
+                _rt_dim "No profiles. Create: rt profile create <name>"
+            fi
+            ;;
+        create)
+            shift
+            local name="${1:-dev}"
+            mkdir -p "$profiles_dir"
+            cat > "$profiles_dir/$name.env" << 'ENVEOF'
+# ROBOTERM Profile
+# Source this to configure your ROS2 environment
+# Usage: rt profile load <name>
+
+# ROS2
+# export ROS_DISTRO=jazzy
+# export ROS_DOMAIN_ID=0
+
+# DDS
+# export RMW_IMPLEMENTATION=rmw_cyclonedds_cpp
+# export CYCLONEDDS_URI=file:///path/to/config.xml
+
+# Workspace
+# source ~/ros2_ws/install/setup.bash
+
+# Custom
+# export ROBOT_NAME=spectra-x1
+ENVEOF
+            _rt_ok "Created profile: $profiles_dir/$name.env"
+            _rt_info "Edit it, then load with: rt profile load $name"
+            ;;
+        load)
+            shift
+            local name="${1:-dev}"
+            local file="$profiles_dir/$name.env"
+            if [ -f "$file" ]; then
+                source "$file"
+                _rt_ok "Loaded profile: $name"
+            else
+                _rt_err "Profile not found: $name"
+                _rt_dim "Available: $(ls "$profiles_dir"/*.env 2>/dev/null | xargs -I{} basename {} .env | tr '\n' ' ')"
+            fi
+            ;;
+        save)
+            shift
+            local name="${1:-current}"
+            mkdir -p "$profiles_dir"
+            {
+                echo "# ROBOTERM Profile — saved $(date)"
+                [ -n "$ROS_DISTRO" ] && echo "export ROS_DISTRO=$ROS_DISTRO"
+                [ -n "$ROS_DOMAIN_ID" ] && echo "export ROS_DOMAIN_ID=$ROS_DOMAIN_ID"
+                [ -n "$RMW_IMPLEMENTATION" ] && echo "export RMW_IMPLEMENTATION=$RMW_IMPLEMENTATION"
+                [ -n "$AMENT_PREFIX_PATH" ] && echo "export AMENT_PREFIX_PATH=$AMENT_PREFIX_PATH"
+                [ -n "$CYCLONEDDS_URI" ] && echo "export CYCLONEDDS_URI=$CYCLONEDDS_URI"
+            } > "$profiles_dir/$name.env"
+            _rt_ok "Saved current env as profile: $name"
+            ;;
+        *)
+            echo "Usage: rt profile [list|create <name>|load <name>|save <name>]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt export — Export data to Foxglove/CSV
+# ============================================================
+rt-export() {
+    _rt_header "Export"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    local cmd="${1:-help}"
+    case "$cmd" in
+        bag2csv)
+            shift
+            if [ -z "$1" ]; then echo "Usage: rt export bag2csv <bag_dir>"; return 1; fi
+            _rt_info "Exporting bag to CSV..."
+            ros2 bag convert -i "$1" -o "${1%.db3}.csv" -s csv 2>/dev/null || \
+            _rt_warn "Direct CSV export not available. Use: rt export bag2mcap first, then open in Foxglove."
+            ;;
+        bag2mcap)
+            shift
+            if [ -z "$1" ]; then echo "Usage: rt export bag2mcap <bag_dir>"; return 1; fi
+            _rt_info "Converting to MCAP format (Foxglove-compatible)..."
+            ros2 bag convert -i "$1" -o "${1}_mcap" -s mcap 2>/dev/null && \
+            _rt_ok "Exported: ${1}_mcap" || \
+            _rt_err "MCAP conversion failed. Install: pip install mcap"
+            ;;
+        foxglove)
+            shift
+            local bag="${1:-}"
+            if [ -z "$bag" ]; then
+                _rt_info "Opening Foxglove Studio..."
+                open "https://app.foxglove.dev" 2>/dev/null || echo "Visit: https://app.foxglove.dev"
+            else
+                _rt_info "Open this bag in Foxglove: $bag"
+                _rt_dim "Drag the .mcap file into Foxglove Studio"
+            fi
+            ;;
+        *)
+            echo "Usage: rt export [bag2csv <bag>|bag2mcap <bag>|foxglove [bag]]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt alias — Custom command shortcuts
+# ============================================================
+rt-alias() {
+    local aliases_file="$HOME/.config/roboterm/aliases.sh"
+
+    local cmd="${1:-list}"
+    case "$cmd" in
+        list)
+            _rt_header "Aliases"
+            echo ""
+            if [ -f "$aliases_file" ]; then
+                cat "$aliases_file" | grep -v "^#" | grep -v "^$" | while read line; do
+                    _rt_info "$line"
+                done
+            else
+                _rt_dim "No aliases. Create: rt alias add <name> <command>"
+            fi
+            ;;
+        add)
+            shift
+            local name="$1"; shift
+            local command="$*"
+            if [ -z "$name" ] || [ -z "$command" ]; then
+                echo "Usage: rt alias add <name> <command>"
+                return 1
+            fi
+            mkdir -p "$(dirname "$aliases_file")"
+            echo "alias rt-$name='$command'" >> "$aliases_file"
+            eval "alias rt-$name='$command'"
+            _rt_ok "Added alias: rt-$name → $command"
+            ;;
+        *)
+            echo "Usage: rt alias [list|add <name> <command>]"
+            ;;
+    esac
+
+    # Source aliases if file exists
+    [ -f "$aliases_file" ] && source "$aliases_file"
+}
+
+# ============================================================
 # rt — Main entry point / help
 # ============================================================
 rt() {
@@ -720,6 +882,9 @@ rt() {
         watch)      shift; rt-watch "$@" ;;
         kill)       shift; rt-kill "$@" ;;
         graph)      shift; rt-graph "$@" ;;
+        profile)    shift; rt-profile "$@" ;;
+        export)     shift; rt-export "$@" ;;
+        alias)      shift; rt-alias "$@" ;;
         help|*)
             echo -e "${_RT_ORANGE}${_RT_BOLD}"
             echo "  ____   ___  ____   ___ _____ _____ ____  __  __ "
@@ -750,12 +915,15 @@ rt() {
             echo -e "  ${_RT_ORANGE}rt watch${_RT_RESET}      Watch topics [topic...|--all]"
             echo -e "  ${_RT_ORANGE}rt kill${_RT_RESET}       Kill a ROS2 node"
             echo -e "  ${_RT_ORANGE}rt graph${_RT_RESET}      ASCII node connection graph"
+            echo -e "  ${_RT_ORANGE}rt profile${_RT_RESET}    Environment profiles [list|create|load|save]"
+            echo -e "  ${_RT_ORANGE}rt export${_RT_RESET}     Export to Foxglove [bag2csv|bag2mcap|foxglove]"
+            echo -e "  ${_RT_ORANGE}rt alias${_RT_RESET}      Custom command shortcuts [list|add]"
             echo ""
             ;;
     esac
 }
 
 # Auto-complete
-complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info help" rt
+complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker lifecycle sensor ssh watch kill graph status info profile export alias help" rt
 
 echo -e "${_RT_DIM}ROBOTERM tools loaded. Type ${_RT_ORANGE}rt${_RT_RESET}${_RT_DIM} for help.${_RT_RESET}"
