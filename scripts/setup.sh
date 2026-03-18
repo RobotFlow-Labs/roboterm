@@ -4,7 +4,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 ROOT="$(pwd)"
 
-echo "=== ghast setup ==="
+echo "=== ROBOTERM setup ==="
 
 # 1. Initialize ghostty submodule
 if [ ! -f ghostty/build.zig ]; then
@@ -31,7 +31,7 @@ fi
 if command -v xcodegen &>/dev/null; then
     echo "Generating Xcode project..."
     xcodegen generate
-    echo "ghast.xcodeproj generated."
+    echo "roboterm.xcodeproj generated."
 else
     echo ""
     echo "WARNING: xcodegen not found. Install it to generate the Xcode project:"
@@ -39,9 +39,25 @@ else
     echo "  xcodegen generate"
 fi
 
+# 4. Install Ghostty config theme
+mkdir -p ~/.config/ghostty
+if [ ! -f ~/.config/ghostty/config ]; then
+    cp Resources/ghostty/config ~/.config/ghostty/config
+    echo "Installed Industrial Cyberpunk theme to ~/.config/ghostty/config"
+fi
+
+# 5. Create default hosts config
+mkdir -p ~/.config/roboterm
+if [ ! -f ~/.config/roboterm/hosts.json ]; then
+    echo '[{"name":"JETSON","host":"jetson.local","type":"jetson"},{"name":"ANIMA-MOTHER","host":"192.168.1.110","type":"server"}]' > ~/.config/roboterm/hosts.json
+    echo "Created default hosts config at ~/.config/roboterm/hosts.json"
+fi
+
 echo ""
 echo "=== Setup complete ==="
 echo ""
 echo "To build and run:"
-echo "  open ghast.xcodeproj"
-echo "  # or: xcodebuild -project ghast.xcodeproj -scheme ghast -configuration Debug build"
+echo "  ./scripts/build.sh --install --run"
+echo ""
+echo "Or manually:"
+echo "  xcodebuild -project roboterm.xcodeproj -scheme roboterm -configuration Debug build"
