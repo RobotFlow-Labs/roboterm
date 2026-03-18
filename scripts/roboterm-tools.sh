@@ -1,0 +1,485 @@
+#!/bin/bash
+# ROBOTERM Shell Tools — source this in your .bashrc/.zshrc
+# Usage: source /path/to/roboterm-tools.sh
+# Or add to ~/.bashrc: source /Applications/ROBOTERM.app/Contents/Resources/roboterm-tools.sh
+
+# ============================================================
+# ROBOTERM — ROS2 Developer Tools
+# ============================================================
+
+export ROBOTERM_VERSION="0.1.0"
+
+# Colors
+_RT_ORANGE='\033[38;2;255;59;0m'
+_RT_GREEN='\033[38;2;0;255;136m'
+_RT_CYAN='\033[38;2;0;221;255m'
+_RT_YELLOW='\033[38;2;255;184;0m'
+_RT_RED='\033[38;2;255;51;51m'
+_RT_DIM='\033[2m'
+_RT_BOLD='\033[1m'
+_RT_RESET='\033[0m'
+
+_rt_header() {
+    echo -e "${_RT_ORANGE}${_RT_BOLD}━━━ ROBOTERM: $1 ━━━${_RT_RESET}"
+}
+
+_rt_ok() { echo -e "  ${_RT_GREEN}●${_RT_RESET} $1"; }
+_rt_warn() { echo -e "  ${_RT_YELLOW}●${_RT_RESET} $1"; }
+_rt_err() { echo -e "  ${_RT_RED}●${_RT_RESET} $1"; }
+_rt_info() { echo -e "  ${_RT_CYAN}●${_RT_RESET} $1"; }
+_rt_dim() { echo -e "  ${_RT_DIM}$1${_RT_RESET}"; }
+
+# ============================================================
+# rt init — Auto-detect and source ROS2 workspace
+# ============================================================
+rt-init() {
+    _rt_header "Workspace Init"
+
+    # Walk up to find colcon workspace
+    local dir="$PWD"
+    while [ "$dir" != "/" ]; do
+        if [ -f "$dir/install/setup.bash" ]; then
+            source "$dir/install/setup.bash"
+            _rt_ok "Sourced: $dir/install/setup.bash"
+            if [ -n "$ROS_DISTRO" ]; then
+                _rt_ok "ROS2 Distro: $ROS_DISTRO"
+            fi
+            if [ -n "$ROS_DOMAIN_ID" ]; then
+                _rt_ok "Domain ID: $ROS_DOMAIN_ID"
+            else
+                _rt_warn "Domain ID: 0 (default)"
+            fi
+            return 0
+        fi
+        dir="$(dirname "$dir")"
+    done
+
+    # Try system ROS2
+    for distro in rolling jazzy iron humble; do
+        if [ -f "/opt/homebrew/opt/ros/$distro/setup.bash" ]; then
+            source "/opt/homebrew/opt/ros/$distro/setup.bash"
+            _rt_ok "Sourced system ROS2: $distro"
+            return 0
+        fi
+        if [ -f "/opt/ros/$distro/setup.bash" ]; then
+            source "/opt/ros/$distro/setup.bash"
+            _rt_ok "Sourced system ROS2: $distro"
+            return 0
+        fi
+    done
+
+    _rt_err "No ROS2 workspace found. Create one with: mkdir -p ~/ros2_ws/src && cd ~/ros2_ws && colcon build"
+    return 1
+}
+
+# ============================================================
+# rt nodes — Live node dashboard
+# ============================================================
+rt-nodes() {
+    _rt_header "Node Dashboard"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then
+        _rt_err "ROS2 not sourced. Run: rt-init"
+        return 1
+    fi
+
+    local nodes=$(ros2 node list 2>/dev/null)
+    if [ -z "$nodes" ]; then
+        _rt_warn "No nodes running"
+        return 0
+    fi
+
+    echo -e "${_RT_DIM}  NAME                              STATUS${_RT_RESET}"
+    echo -e "${_RT_DIM}  ──────────────────────────────────────────${_RT_RESET}"
+    while IFS= read -r node; do
+        _rt_ok "$node"
+    done <<< "$nodes"
+    echo ""
+    local count=$(echo "$nodes" | wc -l | tr -d ' ')
+    _rt_info "Total: $count nodes"
+}
+
+# ============================================================
+# rt topics — Topic monitor with Hz
+# ============================================================
+rt-topics() {
+    _rt_header "Topic Monitor"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then
+        _rt_err "ROS2 not sourced. Run: rt-init"
+        return 1
+    fi
+
+    echo -e "${_RT_DIM}  TOPIC                              TYPE                           PUBS  SUBS${_RT_RESET}"
+    echo -e "${_RT_DIM}  ────────────────────────────────────────────────────────────────────────────────${_RT_RESET}"
+    ros2 topic list -v 2>/dev/null | while IFS= read -r line; do
+        if [[ "$line" == /* ]]; then
+            # Topic line
+            echo -e "  ${_RT_GREEN}●${_RT_RESET} ${_RT_BOLD}$line${_RT_RESET}"
+        elif [[ "$line" == *"Published"* ]] || [[ "$line" == *"Subscribed"* ]]; then
+            echo -e "    ${_RT_DIM}$line${_RT_RESET}"
+        fi
+    done
+    echo ""
+    local count=$(ros2 topic list 2>/dev/null | wc -l | tr -d ' ')
+    _rt_info "Total: $count topics"
+}
+
+# ============================================================
+# rt services — Service list
+# ============================================================
+rt-services() {
+    _rt_header "Services"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    ros2 service list -t 2>/dev/null | while IFS= read -r line; do
+        local svc=$(echo "$line" | awk '{print $1}')
+        local typ=$(echo "$line" | awk '{print $2}')
+        echo -e "  ${_RT_CYAN}●${_RT_RESET} ${_RT_BOLD}$svc${_RT_RESET}  ${_RT_DIM}$typ${_RT_RESET}"
+    done
+}
+
+# ============================================================
+# rt params — Parameter browser
+# ============================================================
+rt-params() {
+    _rt_header "Parameters"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    local node="${1:-}"
+    if [ -z "$node" ]; then
+        ros2 param list 2>/dev/null | while IFS= read -r line; do
+            if [[ "$line" == /* ]]; then
+                echo -e "\n  ${_RT_ORANGE}${_RT_BOLD}$line${_RT_RESET}"
+            else
+                echo -e "    ${_RT_DIM}$line${_RT_RESET}"
+            fi
+        done
+    else
+        ros2 param list "$node" 2>/dev/null | while IFS= read -r param; do
+            local val=$(ros2 param get "$node" "$param" 2>/dev/null | head -1)
+            echo -e "  ${_RT_CYAN}$param${_RT_RESET} = ${_RT_GREEN}$val${_RT_RESET}"
+        done
+    fi
+}
+
+# ============================================================
+# rt doctor — System diagnostics
+# ============================================================
+rt-doctor() {
+    _rt_header "System Diagnostics"
+    echo ""
+
+    # Check ROS2
+    if command -v ros2 &>/dev/null; then
+        _rt_ok "ROS2 CLI: $(which ros2)"
+        if [ -n "$ROS_DISTRO" ]; then
+            _rt_ok "Distro: $ROS_DISTRO"
+        else
+            _rt_warn "ROS_DISTRO not set"
+        fi
+    else
+        _rt_err "ROS2 CLI not found"
+    fi
+
+    # Check Domain ID
+    _rt_info "Domain ID: ${ROS_DOMAIN_ID:-0}"
+
+    # Check DDS
+    if [ -n "$RMW_IMPLEMENTATION" ]; then
+        _rt_ok "DDS: $RMW_IMPLEMENTATION"
+    else
+        _rt_info "DDS: default (CycloneDDS)"
+    fi
+
+    # Check colcon
+    if command -v colcon &>/dev/null; then
+        _rt_ok "colcon: $(which colcon)"
+    else
+        _rt_warn "colcon not found"
+    fi
+
+    # Check Docker
+    if command -v docker &>/dev/null; then
+        if docker info &>/dev/null; then
+            _rt_ok "Docker: running"
+        else
+            _rt_warn "Docker: installed but not running"
+        fi
+    else
+        _rt_dim "Docker: not installed"
+    fi
+
+    # Check sensors
+    echo ""
+    _rt_header "Hardware"
+    if ioreg -p IOUSB -l 2>/dev/null | grep -q "ZED"; then
+        _rt_ok "ZED Camera: connected"
+    fi
+    if ioreg -p IOUSB -l 2>/dev/null | grep -q "RealSense"; then
+        _rt_ok "RealSense: connected"
+    fi
+    ls /dev/tty.usb* 2>/dev/null | while read dev; do
+        _rt_info "Serial: $dev"
+    done
+
+    # Network
+    echo ""
+    _rt_header "Network Hosts"
+    if [ -f ~/.config/roboterm/hosts.json ]; then
+        python3 -c "
+import json
+with open('$HOME/.config/roboterm/hosts.json') as f:
+    hosts = json.load(f)
+for h in hosts:
+    print(f'  {h[\"name\"]} ({h[\"host\"]})')
+" 2>/dev/null
+    fi
+}
+
+# ============================================================
+# rt tf — Transform tree
+# ============================================================
+rt-tf() {
+    _rt_header "Transform Tree"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    local cmd="${1:-tree}"
+    case "$cmd" in
+        tree|frames)
+            ros2 run tf2_tools view_frames 2>/dev/null
+            _rt_ok "Generated: frames.pdf"
+            ;;
+        echo)
+            shift
+            ros2 run tf2_ros tf2_echo "$@" 2>/dev/null
+            ;;
+        monitor)
+            ros2 run tf2_ros tf2_monitor 2>/dev/null
+            ;;
+        *)
+            echo "Usage: rt-tf [tree|echo <src> <tgt>|monitor]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt build — Smart colcon build
+# ============================================================
+rt-build() {
+    _rt_header "Build"
+    echo ""
+
+    if ! command -v colcon &>/dev/null; then
+        _rt_err "colcon not found"
+        return 1
+    fi
+
+    local start_time=$(date +%s)
+
+    if [ -n "$1" ]; then
+        _rt_info "Building package: $1"
+        colcon build --symlink-install --packages-select "$@"
+    else
+        _rt_info "Building all packages..."
+        colcon build --symlink-install
+    fi
+
+    local status=$?
+    local end_time=$(date +%s)
+    local duration=$((end_time - start_time))
+
+    echo ""
+    if [ $status -eq 0 ]; then
+        _rt_ok "Build succeeded in ${duration}s"
+        # Auto-source after build
+        if [ -f install/setup.bash ]; then
+            source install/setup.bash
+            _rt_ok "Sourced install/setup.bash"
+        fi
+    else
+        _rt_err "Build failed after ${duration}s"
+    fi
+    return $status
+}
+
+# ============================================================
+# rt bag — Bag file management
+# ============================================================
+rt-bag() {
+    _rt_header "Bag Tools"
+    echo ""
+    if ! command -v ros2 &>/dev/null; then _rt_err "ROS2 not sourced"; return 1; fi
+
+    local cmd="${1:-list}"
+    case "$cmd" in
+        list|ls)
+            find . -name "*.db3" -o -name "*.mcap" 2>/dev/null | while read f; do
+                local size=$(du -sh "$f" 2>/dev/null | awk '{print $1}')
+                _rt_info "$f ($size)"
+            done
+            ;;
+        info)
+            shift
+            ros2 bag info "$@" 2>/dev/null
+            ;;
+        record)
+            shift
+            if [ -z "$1" ]; then
+                _rt_info "Recording all topics..."
+                ros2 bag record -a
+            else
+                _rt_info "Recording: $*"
+                ros2 bag record "$@"
+            fi
+            ;;
+        play)
+            shift
+            ros2 bag play "$@" 2>/dev/null
+            ;;
+        *)
+            echo "Usage: rt-bag [list|info <bag>|record [topics...]|play <bag>]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt hz — Topic frequency monitor
+# ============================================================
+rt-hz() {
+    if [ -z "$1" ]; then
+        echo "Usage: rt-hz <topic>"
+        return 1
+    fi
+    ros2 topic hz "$@"
+}
+
+# ============================================================
+# rt echo — Pretty topic echo
+# ============================================================
+rt-echo() {
+    if [ -z "$1" ]; then
+        echo "Usage: rt-echo <topic>"
+        return 1
+    fi
+    ros2 topic echo "$@" | python3 -c "
+import sys, json
+try:
+    for line in sys.stdin:
+        print(line, end='')
+except:
+    pass
+" 2>/dev/null || ros2 topic echo "$@"
+}
+
+# ============================================================
+# rt launch — Enhanced launch
+# ============================================================
+rt-launch() {
+    _rt_header "Launch"
+    if [ -z "$1" ]; then
+        echo "Usage: rt-launch <package> <launch_file> [args...]"
+        return 1
+    fi
+    echo ""
+    _rt_info "Launching: $*"
+    echo ""
+    ros2 launch "$@"
+}
+
+# ============================================================
+# rt dds — DDS diagnostics
+# ============================================================
+rt-dds() {
+    _rt_header "DDS Configuration"
+    echo ""
+    _rt_info "Domain ID: ${ROS_DOMAIN_ID:-0}"
+    _rt_info "RMW: ${RMW_IMPLEMENTATION:-rmw_cyclonedds_cpp (default)}"
+    if [ -n "$CYCLONEDDS_URI" ]; then
+        _rt_info "CycloneDDS Config: $CYCLONEDDS_URI"
+    fi
+    echo ""
+    _rt_info "Running ros2 daemon status..."
+    ros2 daemon status 2>/dev/null
+}
+
+# ============================================================
+# rt docker — Docker helpers for ROS2
+# ============================================================
+rt-docker() {
+    local cmd="${1:-ps}"
+    case "$cmd" in
+        ps)     docker compose ps 2>/dev/null || docker ps ;;
+        up)     docker compose up -d ;;
+        down)   docker compose down ;;
+        logs)   docker compose logs -f --tail=50 ;;
+        shell)
+            local container="${2:-}"
+            if [ -z "$container" ]; then
+                container=$(docker ps --format "{{.Names}}" | head -1)
+            fi
+            _rt_info "Entering: $container"
+            docker exec -it "$container" bash
+            ;;
+        *)
+            echo "Usage: rt-docker [ps|up|down|logs|shell [container]]"
+            ;;
+    esac
+}
+
+# ============================================================
+# rt — Main entry point / help
+# ============================================================
+rt() {
+    local cmd="${1:-help}"
+    case "$cmd" in
+        init)       shift; rt-init "$@" ;;
+        nodes)      shift; rt-nodes "$@" ;;
+        topics)     shift; rt-topics "$@" ;;
+        services)   shift; rt-services "$@" ;;
+        params)     shift; rt-params "$@" ;;
+        doctor)     shift; rt-doctor "$@" ;;
+        tf)         shift; rt-tf "$@" ;;
+        build)      shift; rt-build "$@" ;;
+        bag)        shift; rt-bag "$@" ;;
+        hz)         shift; rt-hz "$@" ;;
+        echo)       shift; rt-echo "$@" ;;
+        launch)     shift; rt-launch "$@" ;;
+        dds)        shift; rt-dds "$@" ;;
+        docker)     shift; rt-docker "$@" ;;
+        help|*)
+            echo -e "${_RT_ORANGE}${_RT_BOLD}"
+            echo "  ____   ___  ____   ___ _____ _____ ____  __  __ "
+            echo " |  _ \\ / _ \\| __ ) / _ \\_   _| ____|  _ \\|  \\/  |"
+            echo " | |_) | | | |  _ \\| | | || | |  _| | |_) | |\\/| |"
+            echo " |  _ <| |_| | |_) | |_| || | | |___|  _ <| |  | |"
+            echo " |_| \\_\\\\___/|____/ \\___/ |_| |_____|_| \\_\\_|  |_|"
+            echo -e "${_RT_RESET}"
+            echo -e "${_RT_DIM}  The Terminal for Robotics Developers v$ROBOTERM_VERSION${_RT_RESET}"
+            echo ""
+            echo -e "  ${_RT_ORANGE}rt init${_RT_RESET}        Auto-detect & source ROS2 workspace"
+            echo -e "  ${_RT_ORANGE}rt nodes${_RT_RESET}       Live node dashboard"
+            echo -e "  ${_RT_ORANGE}rt topics${_RT_RESET}      Topic monitor with types"
+            echo -e "  ${_RT_ORANGE}rt services${_RT_RESET}    Service list with types"
+            echo -e "  ${_RT_ORANGE}rt params${_RT_RESET}      Parameter browser [node]"
+            echo -e "  ${_RT_ORANGE}rt doctor${_RT_RESET}      System diagnostics"
+            echo -e "  ${_RT_ORANGE}rt tf${_RT_RESET}          Transform tree [tree|echo|monitor]"
+            echo -e "  ${_RT_ORANGE}rt build${_RT_RESET}       Smart colcon build [package]"
+            echo -e "  ${_RT_ORANGE}rt bag${_RT_RESET}         Bag management [list|info|record|play]"
+            echo -e "  ${_RT_ORANGE}rt hz${_RT_RESET}          Topic frequency <topic>"
+            echo -e "  ${_RT_ORANGE}rt echo${_RT_RESET}        Pretty topic echo <topic>"
+            echo -e "  ${_RT_ORANGE}rt launch${_RT_RESET}      Enhanced ros2 launch"
+            echo -e "  ${_RT_ORANGE}rt dds${_RT_RESET}         DDS configuration & diagnostics"
+            echo -e "  ${_RT_ORANGE}rt docker${_RT_RESET}      Docker helpers [ps|up|down|logs|shell]"
+            echo ""
+            ;;
+    esac
+}
+
+# Auto-complete
+complete -W "init nodes topics services params doctor tf build bag hz echo launch dds docker help" rt
+
+echo -e "${_RT_DIM}ROBOTERM tools loaded. Type ${_RT_ORANGE}rt${_RT_RESET}${_RT_DIM} for help.${_RT_RESET}"
