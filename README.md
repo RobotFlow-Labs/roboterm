@@ -173,20 +173,33 @@ Industrial Cyberpunk theme matching [RobotFlow Labs](https://robotflowlabs.com):
 - No rounded corners — sharp, industrial
 - Monospaced uppercase labels with letter-spacing
 
-## Build
+## Install
 
+### Homebrew (recommended)
 ```bash
-# Prerequisites
-brew install xcodegen
+brew tap RobotFlow-Labs/roboterm
+brew install --cask roboterm
+```
 
-# Build
+### Direct install
+```bash
+curl -fsSL https://raw.githubusercontent.com/RobotFlow-Labs/roboterm/main/scripts/install.sh | bash
+```
+
+### Build from source
+```bash
+brew install xcodegen
 git clone https://github.com/RobotFlow-Labs/roboterm.git
 cd roboterm
-xcodegen generate
-xcodebuild -project roboterm.xcodeproj -scheme roboterm -configuration Debug build
-
-# Install
 ./scripts/build.sh --install --run
+```
+
+### After install
+```bash
+# Add rt CLI tools to your shell
+echo 'source /Applications/ROBOTERM.app/Contents/Resources/roboterm-tools.sh' >> ~/.zshrc
+source ~/.zshrc
+rt --version  # ROBOTERM v0.5.1
 ```
 
 ## Architecture
