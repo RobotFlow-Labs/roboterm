@@ -6,6 +6,7 @@ import SwiftUI
 private let sbBg      = Color(red: 0x0A/255, green: 0x0A/255, blue: 0x0A/255)
 private let sbAccent  = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255)
 private let sbGreen   = Color(red: 0x00/255, green: 0xFF/255, blue: 0x88/255)
+private let sbCyan    = Color(red: 0x00/255, green: 0xDD/255, blue: 0xFF/255)
 private let sbDim     = Color.white.opacity(0.35)
 private let sbBorder  = Color(red: 0xFF/255, green: 0x3B/255, blue: 0x00/255).opacity(0.3)
 
@@ -50,6 +51,24 @@ struct StatusBarView: View {
                 .foregroundColor(sbDim)
                 .lineLimit(1)
                 .truncationMode(.head)
+
+            separatorView
+
+            // Hardware devices
+            ForEach(HardwareState.shared.devices.filter { $0.status == .connected }) { device in
+                HStack(spacing: 3) {
+                    Circle()
+                        .fill(device.type == .camera ? sbCyan :
+                              device.type == .compute ? sbGreen :
+                              device.type == .lidar ? sbAccent : sbDim)
+                        .frame(width: 4, height: 4)
+                    Text(device.name.uppercased())
+                        .font(.system(size: 8, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white.opacity(0.4))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 2)
+            }
 
             Spacer()
 

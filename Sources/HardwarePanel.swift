@@ -60,8 +60,28 @@ final class HardwareState: ObservableObject {
     private var timer: Timer?
 
     private init() {
-        // Start scanning immediately and every 30 seconds
-        scan()
+        // Run initial scan — populate with what we can detect
+        let initial = HardwarePanel.detectDevices()
+
+        // Always include MacBook Camera on Apple Silicon
+        var devices = initial
+        #if arch(arm64)
+        if !devices.contains(where: { $0.name == "MacBook Camera" }) {
+            devices.insert(HardwareDevice(name: "MacBook Camera", type: .camera, status: .connected, detail: "Built-in FaceTime Camera"), at: 0)
+        }
+        #endif
+
+        // Always include configured network hosts (show as disconnected until verified)
+        let hosts = HardwarePanel.loadNetworkHosts()
+        for host in hosts {
+            if !devices.contains(where: { $0.name == host.name }) {
+                devices.append(HardwareDevice(name: host.name, type: .compute, status: .disconnected, detail: "\(host.type) (\(host.host))"))
+            }
+        }
+
+        self.devices = devices
+
+        // Then schedule periodic background scans
         timer = Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.scan() }
         }
@@ -72,14 +92,14 @@ final class HardwareState: ObservableObject {
         isScanning = true
         let currentDevices = self.devices
 
-        scanQueue.async { [weak self] in
+        // Use a thread with its own RunLoop so Process works correctly
+        let thread = Thread {
             let found = HardwarePanel.detectDevices()
 
-            DispatchQueue.main.async {
+            DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
 
                 // If scan found nothing but we had devices before, keep old state
-                // (scan likely failed due to timing)
                 if found.isEmpty && !currentDevices.isEmpty {
                     self.isScanning = false
                     return
@@ -108,6 +128,8 @@ final class HardwareState: ObservableObject {
                 self.isScanning = false
             }
         }
+        thread.qualityOfService = .utility
+        thread.start()
     }
 }
 
