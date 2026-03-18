@@ -4,7 +4,7 @@
 
 <p align="center">
   <strong>The first ROS2-native agentic terminal for Apple Silicon.</strong><br>
-  Built by <a href="https://robotflowlabs.com">RobotFlow Labs</a> &bull; Powered by <a href="https://github.com/ghostty-org/ghostty">GhosttyKit</a> (Metal GPU)
+  Built by <a href="https://robotflowlabs.com">RobotFlow Labs</a> &bull; Pure Swift &bull; <a href="https://github.com/migueldeicaza/SwiftTerm">SwiftTerm</a> Engine
 </p>
 
 <p align="center">
@@ -22,25 +22,29 @@
 Robotics developers on macOS suffer from **fragmented tooling** — jumping between `ros2` CLI, rqt, RViz, Foxglove, Docker, and SSH sessions. ROBOTERM unifies everything into one terminal with:
 
 - **One-click AI agents** (Claude Code, Codex) for agentic development
-- **60+ ROS2 commands** accessible from menus and right-click
-- **Zero overhead** — native Swift on GhosttyKit, <0.5% CPU over plain Ghostty
+- **30 `rt` CLI commands** for ROS2 introspection, debugging, and deployment
+- **Docker container management** with tree view, play/stop, shell access
+- **Hardware auto-detection** (cameras, LiDAR, Jetson, serial devices)
+- **Pure Swift** — zero C/Zig dependencies, SwiftTerm engine
 - **Industrial Cyberpunk design** matching the RobotFlow Labs ecosystem
 
 ```
-ROBOTERM (Swift, ~2500 lines)
+ROBOTERM (Swift, ~4600 lines)
     |
-    +-- Chrome Layer (our code)
-    |   +-- Agent launcher bar (Claude Code, Codex)
-    |   +-- Robotics menu (60+ ROS2 commands)
-    |   +-- Status bar (CPU/MEM, git, ROS2 domain, clock)
+    +-- Chrome Layer
+    |   +-- Agent launcher bar (Claude Code, Codex + ROS2 buttons)
+    |   +-- Docker container panel (tree view, compose groups)
+    |   +-- Hardware panel (IOKit USB hotplug detection)
+    |   +-- Status bar (CPU/MEM, git branch, ROS2 domain, clock)
     |   +-- Workspace sidebar (Industrial Cyberpunk design)
-    |   +-- AppleScript support (full SDEF dictionary)
+    |   +-- AppleScript support (SDEF + Cocoa scripting)
     |   +-- Session persistence
     |
-    +-- GhosttyKit.xcframework (upstream, never modified)
-        +-- Metal GPU-accelerated terminal renderer
+    +-- SwiftTerm (pure Swift terminal engine via SPM)
+        +-- Core Text rendering
         +-- VT100/xterm parser
-        +-- 43 action callbacks
+        +-- Built-in shell process management
+        +-- Keyboard, mouse, clipboard handling
 ```
 
 ## Features
@@ -49,6 +53,15 @@ ROBOTERM (Swift, ~2500 lines)
 One-click launch for AI coding agents directly from the toolbar:
 - **Claude Code** — Anthropic's CLI agent
 - **Codex** — OpenAI's CLI agent
+- Quick buttons: nodes, topics, services, params, gazebo, rviz2, rqt, doctor, docker
+
+### Docker Container Management
+VS Code-style container panel in the sidebar:
+- Tree view grouped by Docker Compose project
+- Play/stop icons for each container
+- Hover actions: Shell, Logs, Stop/Start
+- Right-click: full lifecycle management (start, stop, restart, remove)
+- Auto-refresh every 10 seconds
 
 ### ROS2 Integration (60+ commands)
 
@@ -61,67 +74,54 @@ One-click launch for AI coding agents directly from the toolbar:
 | **Bag Recording** | record all, record select, play, info |
 | **Simulation** | Gazebo, RViz2, rqt, MuJoCo, Isaac Sim |
 
+### CLI Tools (30 commands)
+Add to your `~/.bashrc` or `~/.zshrc`:
+```bash
+[ -n "$ROBOTERM" ] && [ -f "$ROBOTERM_TOOLS" ] && source "$ROBOTERM_TOOLS"
+```
+
+```
+rt init        — Auto-detect & source ROS2 workspace
+rt connect     — Bridge ros2 CLI to Docker container
+rt status      — One-line system status
+rt nodes       — Live node dashboard
+rt topics      — Topic monitor with types
+rt services    — Service list with types
+rt params      — Parameter browser
+rt doctor      — System diagnostics
+rt tf          — Transform tree
+rt build       — Smart colcon build with auto-source
+rt bag         — Bag management (list, info, record, play)
+rt hz/echo     — Topic frequency / pretty echo
+rt launch      — Enhanced ros2 launch
+rt dds         — DDS configuration & diagnostics
+rt docker      — Docker helpers (ps, up, down, logs, shell)
+rt lifecycle   — Node lifecycle management
+rt sensor      — Sensor monitoring (list, watch, hz, bw)
+rt ssh         — SSH to configured robots
+rt watch       — Watch multiple topics (--all for live)
+rt kill        — Kill a ROS2 node
+rt graph       — ASCII node connection graph
+rt profile     — Environment profiles (list, create, load, save)
+rt export      — Export to Foxglove (bag2csv, bag2mcap)
+rt disk        — Disk usage for robotics data
+rt log         — ROS2 log viewer
+rt dupes       — Find duplicate files by hash
+rt alias       — Custom command shortcuts
+```
+
 ### Right-Click Context Menu
 - Copy, Paste, Split (Right/Left/Down/Up), Reset Terminal, Select All
 - **ROS2 submenu**: nodes, topics, services, doctor, TF tree, topic Hz
 - **Launch Agent submenu**: Claude Code, Codex
 
-### CLI Tools (25 commands)
-Add to your `~/.bashrc` or `~/.zshrc`:
-```bash
-# Auto-source ROBOTERM tools when running inside ROBOTERM
-[ -n "$ROBOTERM" ] && [ -f "$ROBOTERM_TOOLS" ] && source "$ROBOTERM_TOOLS"
-```
-
-Then use `rt` commands:
-```
-rt init        — Auto-detect & source ROS2 workspace
-rt status      — One-line system status
-rt info        — Full environment details
-rt nodes       — Live node dashboard
-rt topics      — Topic monitor with types
-rt services    — Service list with types
-rt params      — Parameter browser
-rt doctor      — System diagnostics (ROS2, DDS, Docker, hardware)
-rt tf          — Transform tree (view_frames, echo, monitor)
-rt build       — Smart colcon build with auto-source
-rt bag         — Bag management (list, info, record, play)
-rt hz          — Topic frequency monitor
-rt echo        — Pretty topic echo
-rt launch      — Enhanced ros2 launch
-rt dds         — DDS configuration & diagnostics
-rt docker      — Docker helpers (ps, up, down, logs, shell)
-rt lifecycle   — Node lifecycle management (list, get, set)
-rt sensor      — Sensor monitoring (list, watch, hz, bw)
-rt ssh         — SSH to configured robots
-rt watch       — Watch multiple topics (--all for live dashboard)
-rt kill        — Kill a ROS2 node
-rt graph       — ASCII node connection graph
-rt profile     — Environment profiles (list, create, load, save)
-rt export      — Export to Foxglove (bag2csv, bag2mcap)
-rt alias       — Custom command shortcuts
-```
-
-### Status Bar
-Live system info with zero overhead:
-- CPU/MEM via mach APIs (no subprocess spawning)
-- Git branch from filesystem read (no `git` call)
-- ROS2 distro & domain ID from env vars
-- Clock
-
-### Docker Integration
-- `docker compose ps / up / down / logs`
-- `docker ps -a`, `docker images`
-
-### Hardware
-- Camera, LiDAR, IMU, Gamepad status via `ros2 topic echo`
-- USB device listing (`system_profiler SPUSBDataType`)
-- Serial port discovery (`/dev/tty.*`, `/dev/cu.*`)
-- SSH to robot
-
-### ANIMA Suite
-- Module status, compile, plug
-- Docker compose integration for ANIMA modules
+### Hardware Auto-Detection
+IOKit USB hotplug monitor with dedicated CFRunLoop thread:
+- Cameras: ZED (2/2i/Mini/X), RealSense, USB cameras
+- LiDAR: Velodyne, Ouster, Livox, RPLIDAR, Hokuyo
+- Compute: Jetson, Raspberry Pi (via network probe)
+- Serial: USB serial devices
+- Network hosts from `~/.config/roboterm/hosts.json`
 
 ### AppleScript
 Full Cocoa scripting support with SDEF dictionary:
@@ -137,13 +137,13 @@ Industrial Cyberpunk theme matching [RobotFlow Labs](https://robotflowlabs.com):
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| `#FF3B00` | Orange | Accent, selected state, cursor |
+| `#FF3B00` | Orange | Accent, selected state |
 | `#050505` | Void Black | Terminal background |
 | `#080808` | Near Black | Sidebar background |
-| `#00FF88` | Green | Status indicators, Codex |
-| `#1A1A1A` | Dark Gray | Panels, elevated surfaces |
+| `#00FF88` | Green | Status indicators |
+| `#00DDFF` | Cyan | Docker, cameras |
 
-- JetBrains Mono font throughout
+- CaskaydiaMono Nerd Font (Oh My Posh support)
 - No rounded corners — sharp, industrial
 - Monospaced uppercase labels with letter-spacing
 
@@ -152,7 +152,6 @@ Industrial Cyberpunk theme matching [RobotFlow Labs](https://robotflowlabs.com):
 ```bash
 # Prerequisites
 brew install xcodegen
-# Ghostty.app must be installed (for GhosttyKit resources)
 
 # Build
 git clone https://github.com/RobotFlow-Labs/roboterm.git
@@ -160,27 +159,22 @@ cd roboterm
 xcodegen generate
 xcodebuild -project roboterm.xcodeproj -scheme roboterm -configuration Debug build
 
-# Run
-open ~/Library/Developer/Xcode/DerivedData/roboterm-*/Build/Products/Debug/ROBOTERM.app
+# Install
+./scripts/build.sh --install --run
 ```
 
 ## Architecture
 
-ROBOTERM is a **thin shell** over Ghostty's `GhosttyKit.xcframework`. We never modify the terminal engine — our code only touches the chrome (sidebar, tabs, status bar, menus, agent bar).
+ROBOTERM is a **pure Swift** macOS terminal application using [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) as the terminal engine (Core Text rendering, built-in PTY management). No C bridging headers, no Zig, no xcframeworks — just Swift Package Manager.
 
-**Upstream tracking**: Ghostty submodule pinned to releases. When new versions ship, we pull and rebuild. Our code stays separate.
-
-**Performance budget**:
-
-| Component | CPU Impact | Update Frequency |
-|-----------|-----------|-----------------|
-| Terminal rendering | 0% (Ghostty Metal) | 60fps GPU |
-| Status bar | <0.1% | 10-second timer |
-| Git branch | 0% | On directory change |
-| ROS2 env vars | 0% | On tab switch |
-| CPU/MEM monitor | <0.1% | 10-second mach API |
-
-**Total overhead vs plain Ghostty: <0.5% CPU.**
+| Component | Technology |
+|-----------|-----------|
+| Terminal engine | SwiftTerm (SPM) |
+| UI framework | SwiftUI + AppKit |
+| USB detection | IOKit (native) |
+| Network probe | Network.framework (NWConnection) |
+| Shell tools | Bash (30 `rt` commands) |
+| AppleScript | Cocoa scripting (SDEF) |
 
 ## Keyboard Shortcuts
 
@@ -191,37 +185,35 @@ ROBOTERM is a **thin shell** over Ghostty's `GhosttyKit.xcframework`. We never m
 | `Cmd+N` | New Window |
 | `Cmd+D` | Split Right |
 | `Cmd+Shift+D` | Split Down |
-| `Cmd+Opt+]` | Next Pane |
-| `Cmd+Opt+[` | Previous Pane |
-| `Cmd+Shift+}` | Next Tab |
-| `Cmd+Shift+{` | Previous Tab |
-| `Cmd+1-9` | Jump to Tab |
+| `Cmd+=` | Zoom In |
+| `Cmd+-` | Zoom Out |
+| `Cmd+0` | Reset Zoom |
+| `Ctrl+Cmd+F` | Toggle Fullscreen |
 | `Cmd+Shift+L` | ros2 launch |
 | `Cmd+Shift+B` | colcon build |
 
 ## Roadmap
 
-### Shipped (v0.1.0)
-- [x] Agent launcher bar (Claude Code + Codex)
-- [x] 60+ ROS2 commands in menus
-- [x] 25 `rt` CLI commands
+### Shipped (v0.2.0)
+- [x] Pure Swift terminal (SwiftTerm engine)
+- [x] Agent launcher bar (Claude + Codex)
+- [x] Docker container management (tree view)
+- [x] 60+ ROS2 menu commands
+- [x] 30 `rt` CLI commands
+- [x] Docker-ROS2 bridge (`rt connect`)
 - [x] IOKit USB hotplug detection
-- [x] AppleScript support (SDEF + Cocoa scripting)
+- [x] AppleScript support
 - [x] Session persistence
-- [x] ROS2 workspace auto-detection
-- [x] Node dashboard, topic monitor, TF2 debugging
-- [x] DDS inspector, lifecycle management
-- [x] Bag management + Foxglove export
-- [x] Sensor monitoring, SSH robot profiles
-- [x] Environment profiles, custom aliases
-- [x] Right-click context menu with ROS2 actions
+- [x] Hardware auto-detection
+- [x] Custom app icon
+- [x] Industrial Cyberpunk design
 
-### Next (v0.2.0)
-- [ ] Inline camera/LiDAR preview in terminal
-- [ ] ROS2 node graph visualization (TUI)
-- [ ] RosSwift integration (native pub/sub)
+### Next (v0.3.0)
+- [ ] RosSwift native integration (pub/sub without CLI)
+- [ ] Inline camera/LiDAR preview
 - [ ] Bag timeline viewer
 - [ ] Recording indicator in status bar
+- [ ] ROS2 node graph TUI visualization
 
 ## License
 
@@ -229,6 +221,5 @@ Apache 2.0
 
 ## Credits
 
-- Terminal engine: [Ghostty](https://github.com/ghostty-org/ghostty) by Mitchell Hashimoto
-- Original chrome concept: [ghast](https://github.com/aidenybai/ghast)
+- Terminal engine: [SwiftTerm](https://github.com/migueldeicaza/SwiftTerm) by Miguel de Icaza
 - Built by [RobotFlow Labs](https://robotflowlabs.com) / [AIFLOW LABS](https://aiflowlabs.io)
