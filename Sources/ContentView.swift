@@ -110,14 +110,17 @@ struct WorkspaceSidebar: View {
             }
             .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 4)
 
-            // Docker containers section
-            DockerPanelView(tabManager: tabManager)
+            // Bottom panels — scrollable together so they don't overlap
+            ScrollView(.vertical, showsIndicators: false) {
+                VStack(spacing: 0) {
+                    // Docker containers section
+                    DockerPanelView(tabManager: tabManager)
 
-            // Hardware section
-            Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
-                .padding(.horizontal, 8)
+                    // Hardware section
+                    Rectangle().fill(rfAccent.opacity(0.15)).frame(height: 1)
+                        .padding(.horizontal, 8)
 
             VStack(alignment: .leading, spacing: 0) {
                 // Header
@@ -185,6 +188,8 @@ struct WorkspaceSidebar: View {
                 }
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
+            }
+                }
             }
         }
         .background(sidebarBg)
