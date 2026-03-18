@@ -32,10 +32,18 @@ struct HardwareDevice: Identifiable {
 // MARK: - Hardware Panel View
 
 struct HardwarePanel: View {
-    @State private var devices: [HardwareDevice] = []
+    @State private var devices: [HardwareDevice] = knownDevices
     @State private var isScanning = false
 
     private let scanTimer = Timer.publish(every: 15, on: .main, in: .common).autoconnect()
+
+    /// Pre-populated device registry — always visible, status updated by scan.
+    /// Add your hardware here so it always shows in the sidebar.
+    private static let knownDevices: [HardwareDevice] = [
+        HardwareDevice(name: "ZED 2i", type: .camera, status: .disconnected, detail: "Stereolabs Depth Camera"),
+        HardwareDevice(name: "JETSON", type: .compute, status: .disconnected, detail: "NVIDIA Jetson (jetson.local)"),
+        HardwareDevice(name: "ANIMA-MOTHER", type: .compute, status: .disconnected, detail: "Mac Mini M4 Pro (192.168.1.110)"),
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -108,12 +116,36 @@ struct HardwarePanel: View {
         isScanning = true
         DispatchQueue.global(qos: .utility).async {
             let found = Self.detectDevices()
+            let foundNames = Set(found.map { $0.name })
+
             DispatchQueue.main.async {
-                // Only update if scan returned results, or if we had none before
-                // This prevents flashing when scan is slow
-                if !found.isEmpty || self.devices.isEmpty {
-                    self.devices = found
+                // Merge: update status of known devices, add new ones
+                var updated: [HardwareDevice] = []
+
+                // Update existing devices
+                for device in self.devices {
+                    if foundNames.contains(device.name) {
+                        // Still connected
+                        updated.append(HardwareDevice(
+                            name: device.name, type: device.type,
+                            status: .connected, detail: device.detail
+                        ))
+                    } else {
+                        // Not found this scan — mark disconnected but keep in list
+                        updated.append(HardwareDevice(
+                            name: device.name, type: device.type,
+                            status: .disconnected, detail: device.detail
+                        ))
+                    }
                 }
+
+                // Add newly discovered devices not in the registry
+                let existingNames = Set(updated.map { $0.name })
+                for device in found where !existingNames.contains(device.name) {
+                    updated.append(device)
+                }
+
+                self.devices = updated
                 self.isScanning = false
             }
         }
